@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>引継ぎくん - 業務引継ぎ支援AI</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <!-- htmx -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/sse.js"></script>
+    <!-- marked.js for markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- ヘッダー -->
+        <header class="header">
+            <h1 class="logo">引継ぎくん</h1>
+            <p class="tagline">動画をアップロードするだけで、引継ぎドキュメントが完成</p>
+        </header>
+
+        <!-- メインコンテンツ -->
+        <main class="main-content">
+            <!-- Phase 1: アップロード -->
+            <section id="upload-phase" class="phase active">
+                <div class="phase-content">
+                    <div class="upload-area" id="drop-zone">
+                        <div class="upload-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="17 8 12 3 7 8"/>
+                                <line x1="12" y1="3" x2="12" y2="15"/>
+                            </svg>
+                        </div>
+                        <p class="upload-text">動画をドラッグ&ドロップ</p>
+                        <p class="upload-subtext">または</p>
+                        <button type="button" class="upload-button" id="select-file-btn">ファイルを選択</button>
+                        <p class="upload-hint">MP4, MOV, AVI, WebM（最大2GB）</p>
+                    </div>
+                    <input type="file" id="file-input" accept="video/*,.pdf,.xlsx,.docx" hidden>
+
+                    <!-- オプション入力（折りたたみ） -->
+                    <details class="optional-inputs">
+                        <summary>詳細情報を入力（任意）</summary>
+                        <div class="input-group">
+                            <label for="business-title">業務名 / タイトル</label>
+                            <input type="text" id="business-title" placeholder="例: 月次請求書処理フロー">
+                        </div>
+                        <div class="input-group">
+                            <label for="author-name">担当者名</label>
+                            <input type="text" id="author-name" placeholder="例: 山田 太郎">
+                        </div>
+                        <div class="input-group">
+                            <label for="additional-notes">補足情報</label>
+                            <textarea id="additional-notes" rows="3" placeholder="例: 特にエラー時の対応手順について重点的に話しています"></textarea>
+                        </div>
+                    </details>
+                </div>
+            </section>
+
+            <!-- Phase 2: 処理中 + 質問 -->
+            <section id="processing-phase" class="phase">
+                <div class="phase-content">
+                    <div class="processing-status">
+                        <div class="spinner"></div>
+                        <p class="status-text" id="status-text">動画を処理中...</p>
+                        <div class="progress-steps">
+                            <div class="step" id="step-upload">
+                                <span class="step-icon">1</span>
+                                <span class="step-label">アップロード</span>
+                            </div>
+                            <div class="step" id="step-process">
+                                <span class="step-icon">2</span>
+                                <span class="step-label">動画処理</span>
+                            </div>
+                            <div class="step" id="step-analyze">
+                                <span class="step-icon">3</span>
+                                <span class="step-label">AI分析</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 質問カード（Typeform風） -->
+                    <div class="question-card" id="question-card" style="display: none;">
+                        <p class="question-label">質問</p>
+                        <p class="question-text" id="question-text"></p>
+                        <input type="text" class="question-input" id="question-input" placeholder="">
+                        <div class="question-actions">
+                            <button class="btn btn-secondary" id="skip-btn">スキップ</button>
+                            <button class="btn btn-primary" id="answer-btn">回答する</button>
+                        </div>
+                        <p class="question-hint">すべての質問はスキップ可能です</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Phase 3: 方針確認 -->
+            <section id="policy-phase" class="phase">
+                <div class="phase-content">
+                    <h2 class="phase-title">解析方針の確認</h2>
+                    <p class="phase-description">AIが動画の冒頭を分析しました。必要に応じて方針を編集してください。</p>
+
+                    <div class="policy-editor">
+                        <textarea id="policy-textarea" rows="12" placeholder="解析方針がここに表示されます..."></textarea>
+                    </div>
+
+                    <div class="phase-actions">
+                        <button class="btn btn-primary btn-large" id="start-analysis-btn">
+                            この方針で詳細解析を開始
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Phase 4: 詳細解析中 -->
+            <section id="analyzing-phase" class="phase">
+                <div class="phase-content center">
+                    <div class="spinner large"></div>
+                    <h2 class="phase-title">詳細解析中...</h2>
+                    <p class="phase-description">動画全体を分析しています。しばらくお待ちください。</p>
+                    <p class="encouraging-message" id="encouraging-message">もうすぐ完成です！</p>
+                </div>
+            </section>
+
+            <!-- Phase 5: 完了 / プレビュー -->
+            <section id="complete-phase" class="phase">
+                <div class="phase-content split-view">
+                    <!-- 左: エディタ -->
+                    <div class="editor-pane">
+                        <div class="pane-header">
+                            <h3>解析結果</h3>
+                            <button class="btn btn-small" id="generate-doc-btn">ドキュメント生成</button>
+                        </div>
+                        <div class="editor-content" id="analysis-result"></div>
+                    </div>
+
+                    <!-- 右: プレビュー -->
+                    <div class="preview-pane">
+                        <div class="pane-header">
+                            <h3>プレビュー</h3>
+                            <button class="btn btn-small btn-secondary" id="copy-btn">コピー</button>
+                        </div>
+                        <div class="preview-content" id="document-preview">
+                            <p class="placeholder-text">「ドキュメント生成」をクリックするとプレビューが表示されます</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- フッター -->
+        <footer class="footer">
+            <p>お疲れ様でした！ 引継ぎくんがサポートします。</p>
+        </footer>
+    </div>
+
+    <!-- Hidden session ID -->
+    <input type="hidden" id="session-id" value="{{ session_id }}">
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
