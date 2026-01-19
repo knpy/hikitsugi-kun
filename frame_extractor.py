@@ -220,3 +220,34 @@ def replace_image_placeholders(markdown_text: str, frames: List[Tuple[float, str
     
     new_text = re.sub(pattern, replacer, markdown_text)
     return new_text
+
+
+def clip_video_head(video_path: str, output_path: str, duration: int = 300) -> None:
+    """
+    動画の冒頭N秒を切り出す（再エンコードなしで高速処理）
+
+    Args:
+        video_path: 入力動画パス
+        output_path: 出力動画パス
+        duration: 切り出す秒数（デフォルト300秒=5分）
+    """
+    try:
+        (
+            ffmpeg
+            .input(video_path, ss=0, t=duration)
+            .output(output_path, c="copy")
+            .overwrite_output()
+            .run(quiet=True)
+        )
+    except ffmpeg.Error:
+        # copyで失敗した場合は再エンコードを試みる（安全策）
+        try:
+            (
+                ffmpeg
+                .input(video_path, ss=0, t=duration)
+                .output(output_path)
+                .overwrite_output()
+                .run(quiet=True)
+            )
+        except ffmpeg.Error as e2:
+            raise RuntimeError(f"動画クリッピング失敗: {e2}")
