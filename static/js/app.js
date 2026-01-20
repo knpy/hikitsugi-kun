@@ -326,41 +326,21 @@ function updateUploadProgress(progress) {
 }
 
 // ==========================================================================
-// Phase 1: 軽量解析
+// Phase 1: 軽量解析（SSEベース - 実際の進捗）
 // ==========================================================================
-function startPhase1() {
-    showStep('phase1');
+function initPhase1Display() {
+    // Phase1画面の初期表示
+    elements.phase1Progress.textContent = '0%';
+    elements.phase1ProgressBar.style.width = '0%';
+    elements.currentTimestamp.textContent = '00:00';
+    elements.currentRecognition.textContent = '準備中...';
+}
 
-    const recognitions = [
-        { time: '00:12', text: 'ブラウザを起動' },
-        { time: '00:32', text: 'ログイン画面を発見' },
-        { time: '01:05', text: '認証情報を入力中' },
-        { time: '01:45', text: 'メニュー画面を操作' },
-        { time: '02:20', text: 'データ入力フォームにアクセス' },
-        { time: '03:10', text: 'Excel ファイルを開く' },
-        { time: '04:15', text: 'データをコピー&ペースト' },
-        { time: '04:50', text: '保存ボタンをクリック' }
-    ];
-
-    let index = 0;
-    const phase1Interval = setInterval(() => {
-        if (index < recognitions.length) {
-            elements.currentTimestamp.textContent = recognitions[index].time;
-            elements.currentRecognition.textContent = recognitions[index].text;
-
-            const progress = ((index + 1) / recognitions.length) * 100;
-            elements.phase1Progress.textContent = `${Math.round(progress)}%`;
-            elements.phase1ProgressBar.style.width = `${progress}%`;
-
-            index++;
-        } else {
-            clearInterval(phase1Interval);
-            setTimeout(() => {
-                showStep('questions');
-                setupQuestionsUI();
-            }, 1000);
-        }
-    }, 600);
+function updatePhase1Progress(step, progress) {
+    // SSEから受信した進捗で更新
+    elements.phase1Progress.textContent = `${progress}%`;
+    elements.phase1ProgressBar.style.width = `${progress}%`;
+    elements.currentRecognition.textContent = step;
 }
 
 // ==========================================================================
@@ -723,6 +703,19 @@ function startEventStream(isRetry = false) {
         sseRetryCount = 0;
     });
 
+    state.eventSource.addEventListener('progress', (e) => {
+        const data = JSON.parse(e.data);
+        console.log('Progress event received:', data);
+
+        // Phase1画面の進捗を更新
+        if (state.currentStep === 'phase1') {
+            updatePhase1Progress(data.step, data.progress);
+        }
+
+        // Reset retry count on successful event
+        sseRetryCount = 0;
+    });
+
     state.eventSource.addEventListener('scoping', (e) => {
         const data = JSON.parse(e.data);
         // Update AI understanding from server
@@ -818,7 +811,8 @@ function handlePhaseChange(phase) {
         case 'processing':
             // Show Phase1 analysis screen
             showStep('phase1');
-            // The actual progress will come from SSE 'scoping' events
+            // Initialize Phase1 display
+            initPhase1Display();
             break;
         case 'questioning':
             showStep('questions');

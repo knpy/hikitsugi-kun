@@ -34,6 +34,7 @@ async def event_stream(session_id: str, request: Request):
     async def generate():
         last_phase = None
         last_scoping = ""
+        last_progress = -1
 
         while True:
             # クライアント切断チェック
@@ -49,6 +50,11 @@ async def event_stream(session_id: str, request: Request):
             if session.phase != last_phase:
                 last_phase = session.phase
                 yield f"event: phase\ndata: {json.dumps({'phase': session.phase.value})}\n\n"
+
+            # 進捗通知
+            if session.processing_progress != last_progress:
+                last_progress = session.processing_progress
+                yield f"event: progress\ndata: {json.dumps({'step': session.processing_step, 'progress': session.processing_progress})}\n\n"
 
             # スコーピング結果が出たら通知
             if session.scoping_result and session.scoping_result != last_scoping:

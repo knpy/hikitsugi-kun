@@ -48,6 +48,10 @@ class SessionData:
     questions: list = field(default_factory=list)
     current_question_index: int = 0
 
+    # Phase1進捗情報
+    processing_step: str = ""  # "クリップ作成中", "解析中"など
+    processing_progress: int = 0  # 0-100
+
     def update(self):
         """更新日時を更新"""
         self.updated_at = time.time()

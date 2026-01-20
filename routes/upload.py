@@ -55,10 +55,17 @@ async def _process_video_async(session_id: str, file_path: str, mime_type: str):
         return
 
     try:
+        # 1. PROCESSING開始
         session.phase = ProcessingPhase.PROCESSING
+        session.processing_step = "準備中"
+        session.processing_progress = 0
         session.update()
 
-        # 1. 冒頭5分をクリップ（スコーピング用）
+        # 2. クリップ作成
+        session.processing_step = "冒頭5分を抽出中"
+        session.processing_progress = 10
+        session.update()
+
         clip_path = file_path + "_clip.mp4"
         logger.info(f"Creating clip: {clip_path}")
         clip_video_head(file_path, clip_path, duration=300)
@@ -68,13 +75,24 @@ async def _process_video_async(session_id: str, file_path: str, mime_type: str):
         else:
             logger.error(f"Clip file not created!")
 
-        # 2. クリップをGeminiにアップロード
+        session.processing_progress = 20
+        session.update()
+
+        # 3. クリップをGeminiにアップロード
+        session.processing_step = "動画を読み込んでいます"
+        session.processing_progress = 25
+        session.update()
+
         logger.info("Uploading clip to Gemini...")
         clip_file = await upload_video_to_gemini(clip_path, mime_type)
         logger.info(f"Clip uploaded. Gemini file name: {clip_file.name}")
 
-        # 3. 初期分析（スコーピング）
-        session.phase = ProcessingPhase.QUESTIONING
+        session.processing_progress = 40
+        session.update()
+
+        # 4. スコーピング実行
+        session.processing_step = "業務内容を確認しています"
+        session.processing_progress = 50
         session.update()
 
         user_context = ""
@@ -94,16 +112,29 @@ async def _process_video_async(session_id: str, file_path: str, mime_type: str):
         session.scoping_result = scoping_result
         session.user_policy = scoping_result  # デフォルトで同じ
 
-        # 4. 全編動画をアップロード（詳細解析用）
+        session.processing_progress = 70
+        session.update()
+
+        # 5. 全編動画をアップロード（詳細解析用）
+        session.processing_step = "解析方針を検討しています"
+        session.processing_progress = 75
+        session.update()
+
         logger.info("Uploading full video to Gemini...")
         session.gemini_file = await upload_video_to_gemini(file_path, mime_type)
         logger.info(f"Full video uploaded. Gemini file name: {session.gemini_file.name}")
+
+        session.processing_progress = 90
+        session.update()
 
         # クリップファイルを削除
         if os.path.exists(clip_path):
             os.unlink(clip_path)
             logger.info("Clip file deleted")
 
+        # 6. 完了
+        session.processing_step = "解析完了"
+        session.processing_progress = 100
         session.phase = ProcessingPhase.QUESTIONING
         session.update()
         logger.info("Processing complete, phase set to QUESTIONING")
@@ -111,7 +142,7 @@ async def _process_video_async(session_id: str, file_path: str, mime_type: str):
     except Exception as e:
         logger.error(f"Processing error: {e}", exc_info=True)
         session.phase = ProcessingPhase.ERROR
-        session.scoping_result = f"エラーが発生しました: {str(e)}"
+        session.processing_step = f"エラー: {str(e)}"
         session.update()
 
 
