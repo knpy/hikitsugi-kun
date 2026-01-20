@@ -56,3 +56,6 @@ htmlcov/
 
 # Claude Code
 .claude/settings.local.json
+
+# v0 Mock
+v0-mock/

@@ -15,143 +15,366 @@
     <div class="app-container">
         <!-- ヘッダー -->
         <header class="header">
-            <h1 class="logo">引継ぎくん</h1>
-            <p class="tagline">動画をアップロードするだけで、引継ぎドキュメントが完成</p>
+            <a href="/" class="back-link">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                <span>ホーム</span>
+            </a>
         </header>
+
+        <!-- ステップインジケーター -->
+        <div class="step-indicator" id="step-indicator">
+            <div class="step-dot active" data-step="welcome"></div>
+            <div class="step-dot" data-step="upload"></div>
+            <div class="step-dot" data-step="uploading"></div>
+            <div class="step-dot" data-step="phase1"></div>
+            <div class="step-dot" data-step="questions"></div>
+            <div class="step-dot" data-step="phase2"></div>
+            <div class="step-dot" data-step="complete"></div>
+        </div>
 
         <!-- メインコンテンツ -->
         <main class="main-content">
-            <!-- Phase 1: アップロード -->
-            <section id="upload-phase" class="phase active">
-                <div class="phase-content">
+
+            <!-- Step: Welcome -->
+            <section id="step-welcome" class="step active">
+                <div class="welcome-content">
+                    <div class="phase-icon gradient">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/>
+                            <line x1="7" y1="2" x2="7" y2="22"/>
+                            <line x1="17" y1="2" x2="17" y2="22"/>
+                            <line x1="2" y1="12" x2="22" y2="12"/>
+                            <line x1="2" y1="7" x2="7" y2="7"/>
+                            <line x1="2" y1="17" x2="7" y2="17"/>
+                            <line x1="17" y1="17" x2="22" y2="17"/>
+                            <line x1="17" y1="7" x2="22" y2="7"/>
+                        </svg>
+                    </div>
+                    <h1 class="welcome-title">お疲れさまです!<br>あともう少しですね</h1>
+                    <p class="welcome-description">
+                        業務の録画をポンっとアップロードするだけ。<br>
+                        あとは引継ぎくんが全部やっておきます
+                    </p>
+
+                    <!-- 処理の説明 -->
+                    <div class="process-box">
+                        <div class="process-header">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 3l1.45 2.9L17 6.5l-2.18 2.18L15.36 13 12 11.18 8.64 13l.54-4.32L7 6.5l3.55-.6L12 3z"/>
+                                <path d="M19 19H5"/>
+                            </svg>
+                            <h3>どうやって作るの?</h3>
+                        </div>
+                        <div class="process-steps">
+                            <div class="process-step">
+                                <div class="step-number primary">1</div>
+                                <div class="step-content">
+                                    <p class="step-title">まず動画をざっと確認</p>
+                                    <p class="step-desc">何の作業かを把握します (約30秒)</p>
+                                </div>
+                            </div>
+                            <div class="process-step">
+                                <div class="step-number primary">2</div>
+                                <div class="step-content">
+                                    <p class="step-title">いくつか質問します</p>
+                                    <p class="step-desc">誰に引き継ぐか、など</p>
+                                </div>
+                            </div>
+                            <div class="process-step">
+                                <div class="step-number accent">3</div>
+                                <div class="step-content">
+                                    <p class="step-title">本格的にドキュメント生成</p>
+                                    <p class="step-desc">あなたの回答を元に、詳しく解析します</p>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="process-note">まず概要を把握してから質問することで、より精度の高いドキュメントを作れます</p>
+                    </div>
+
+                    <button type="button" class="btn-primary-large" id="start-upload-btn">
+                        <span>動画をアップロード</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 18l6-6-6-6"/>
+                        </svg>
+                    </button>
+                    <p class="format-hint">対応形式: MP4, MOV, AVI / 最大500MB</p>
+                </div>
+            </section>
+
+            <!-- Step: Upload -->
+            <section id="step-upload" class="step">
+                <div class="upload-content">
+                    <h2 class="section-title">録画した動画はありますか?</h2>
+                    <p class="section-description">ここに置いてもらえれば、すぐに処理を始めます</p>
+
                     <div class="upload-area" id="drop-zone">
-                        <div class="upload-icon">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <input type="file" id="file-input" accept="video/*" hidden>
+                        <div class="upload-icon" id="upload-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                                 <polyline points="17 8 12 3 7 8"/>
                                 <line x1="12" y1="3" x2="12" y2="15"/>
                             </svg>
                         </div>
-                        <p class="upload-text">動画をドラッグ&ドロップ</p>
-                        <p class="upload-subtext">または</p>
-                        <button type="button" class="upload-button" id="select-file-btn">ファイルを選択</button>
-                        <p class="upload-hint">MP4, MOV, AVI, WebM（最大2GB）</p>
+                        <p class="upload-text" id="upload-text">ファイルをドロップ、またはクリック</p>
+                        <p class="upload-hint">MP4, MOV, AVI / 最大500MB</p>
                     </div>
-                    <input type="file" id="file-input" accept="video/*,.pdf,.xlsx,.docx" hidden>
 
-                    <!-- オプション入力（折りたたみ） -->
-                    <details class="optional-inputs">
-                        <summary>詳細情報を入力（任意）</summary>
-                        <div class="input-group">
-                            <label for="business-title">業務名 / タイトル</label>
-                            <input type="text" id="business-title" placeholder="例: 月次請求書処理フロー">
-                        </div>
-                        <div class="input-group">
-                            <label for="author-name">担当者名</label>
-                            <input type="text" id="author-name" placeholder="例: 山田 太郎">
-                        </div>
-                        <div class="input-group">
-                            <label for="additional-notes">補足情報</label>
-                            <textarea id="additional-notes" rows="3" placeholder="例: 特にエラー時の対応手順について重点的に話しています"></textarea>
-                        </div>
-                    </details>
+                    <button type="button" class="back-button" id="back-to-welcome">戻る</button>
                 </div>
             </section>
 
-            <!-- Phase 2: 処理中 + 質問 -->
-            <section id="processing-phase" class="phase">
-                <div class="phase-content">
-                    <div class="processing-status">
-                        <div class="spinner"></div>
-                        <p class="status-text" id="status-text">動画を処理中...</p>
-                        <div class="progress-steps">
-                            <div class="step" id="step-upload">
-                                <span class="step-icon">1</span>
-                                <span class="step-label">アップロード</span>
-                            </div>
-                            <div class="step" id="step-process">
-                                <span class="step-icon">2</span>
-                                <span class="step-label">動画処理</span>
-                            </div>
-                            <div class="step" id="step-analyze">
-                                <span class="step-icon">3</span>
-                                <span class="step-label">AI分析</span>
-                            </div>
-                        </div>
+            <!-- Step: Uploading -->
+            <section id="step-uploading" class="step">
+                <div class="uploading-content">
+                    <div class="phase-icon gradient pulse">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
                     </div>
+                    <h2 class="section-title">受け取りました!</h2>
+                    <p class="section-description">まずは動画の内容を確認させてください</p>
 
-                    <!-- 質問カード（Typeform風） -->
-                    <div class="question-card" id="question-card" style="display: none;">
-                        <p class="question-label">質問</p>
-                        <p class="question-text" id="question-text"></p>
-                        <input type="text" class="question-input" id="question-input" placeholder="">
-                        <div class="question-actions">
-                            <button class="btn btn-secondary" id="skip-btn">スキップ</button>
-                            <button class="btn btn-primary" id="answer-btn">回答する</button>
+                    <div class="progress-card">
+                        <div class="file-info">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/>
+                                <line x1="7" y1="2" x2="7" y2="22"/>
+                                <line x1="17" y1="2" x2="17" y2="22"/>
+                                <line x1="2" y1="12" x2="22" y2="12"/>
+                            </svg>
+                            <div class="file-details">
+                                <p class="file-name" id="file-name">video.mp4</p>
+                                <p class="file-size" id="file-size">0 MB</p>
+                            </div>
                         </div>
-                        <p class="question-hint">すべての質問はスキップ可能です</p>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar" id="upload-progress"></div>
+                        </div>
+                        <p class="progress-text" id="progress-text">0%</p>
                     </div>
                 </div>
             </section>
 
-            <!-- Phase 3: 方針確認 -->
-            <section id="policy-phase" class="phase">
-                <div class="phase-content">
-                    <h2 class="phase-title">解析方針の確認</h2>
-                    <p class="phase-description">AIが動画の冒頭を分析しました。必要に応じて方針を編集してください。</p>
+            <!-- Step: Phase1 (軽量解析) -->
+            <section id="step-phase1" class="step">
+                <div class="phase1-content">
+                    <div class="phase-icon gradient">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                    </div>
+                    <h2 class="section-title">動画を確認しています</h2>
+                    <p class="section-description">何の作業か把握中です...</p>
 
-                    <div class="policy-editor">
-                        <textarea id="policy-textarea" rows="12" placeholder="解析方針がここに表示されます..."></textarea>
+                    <div class="recognition-card">
+                        <div class="recognition-header">
+                            <div class="live-indicator">
+                                <span class="live-dot"></span>
+                                <span>リアルタイム解析中</span>
+                            </div>
+                            <span class="recognition-progress" id="phase1-progress">0%</span>
+                        </div>
+                        <div class="progress-bar-container thin">
+                            <div class="progress-bar gradient" id="phase1-progress-bar"></div>
+                        </div>
+                        <div class="current-recognition">
+                            <span class="timestamp" id="current-timestamp">00:00</span>
+                            <span class="recognition-text" id="current-recognition">解析を開始しています...</span>
+                        </div>
                     </div>
 
-                    <div class="phase-actions">
-                        <button class="btn btn-primary btn-large" id="start-analysis-btn">
-                            この方針で詳細解析を開始
+                    <p class="phase-hint">もうすぐ終わります。このあと簡単な質問をさせてください</p>
+                </div>
+            </section>
+
+            <!-- Step: Questions -->
+            <section id="step-questions" class="step">
+                <div class="questions-content">
+                    <!-- 初回のみ表示されるヘッダー -->
+                    <div class="questions-header" id="questions-header">
+                        <div class="phase-icon accent-gradient">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 3l1.45 2.9L17 6.5l-2.18 2.18L15.36 13 12 11.18 8.64 13l.54-4.32L7 6.5l3.55-.6L12 3z"/>
+                                <path d="M19 19H5"/>
+                            </svg>
+                        </div>
+                        <h2 class="section-title">少しだけ教えてください</h2>
+                        <p class="section-description">
+                            待ち時間を有効活用しましょう!<br>
+                            答えてもらうほど、いい感じのドキュメントができます
+                        </p>
+                    </div>
+
+                    <!-- AIが理解した内容 -->
+                    <div class="ai-understanding" id="ai-understanding">
+                        <div class="understanding-header">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                                <polyline points="22 4 12 14.01 9 11.01"/>
+                            </svg>
+                            <h3>ここまで分かりました</h3>
+                        </div>
+                        <div class="understanding-items">
+                            <div class="understanding-item">
+                                <span class="item-label">作業内容:</span>
+                                <span class="item-value" id="ai-task-type">顧客管理システムへのデータ入力</span>
+                            </div>
+                            <div class="understanding-item">
+                                <span class="item-label">推定ステップ:</span>
+                                <span class="item-value" id="ai-estimated-steps">約7個</span>
+                            </div>
+                            <div class="understanding-item">
+                                <span class="item-label">使用ツール:</span>
+                                <span class="item-value" id="ai-tools">Chrome、Excel、社内システム</span>
+                            </div>
+                            <div class="understanding-item">
+                                <span class="item-label">所要時間:</span>
+                                <span class="item-value" id="ai-duration">約15分</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- チャットメッセージ -->
+                    <div class="chat-messages" id="chat-messages">
+                        <!-- 会話履歴がここに追加される -->
+                    </div>
+
+                    <!-- 現在の質問 -->
+                    <div class="current-question" id="current-question">
+                        <div class="ai-message">
+                            <div class="ai-avatar pulse">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 3l1.45 2.9L17 6.5l-2.18 2.18L15.36 13 12 11.18 8.64 13l.54-4.32L7 6.5l3.55-.6L12 3z"/>
+                                </svg>
+                            </div>
+                            <p class="ai-question-text" id="question-text">誰に引き継ぎますか?</p>
+                        </div>
+
+                        <!-- テキスト入力 -->
+                        <div class="question-input-area" id="text-input-area">
+                            <input type="text" class="question-input" id="question-input" placeholder="入力してEnter">
+                            <button type="button" class="send-button" id="send-btn">
+                                <span>送信</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M9 18l6-6-6-6"/>
+                                </svg>
+                            </button>
+                        </div>
+
+                        <!-- 選択肢 -->
+                        <div class="choice-options" id="choice-options" style="display: none;">
+                            <!-- 選択肢がここに追加される -->
+                        </div>
+                    </div>
+
+                    <!-- 質問プログレス -->
+                    <div class="question-progress" id="question-progress">
+                        <!-- プログレスドットがここに追加される -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Step: Phase2 (本格解析) -->
+            <section id="step-phase2" class="step">
+                <div class="phase2-content">
+                    <div class="phase-icon gradient pulse">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                        </svg>
+                    </div>
+                    <h2 class="section-title">ドキュメントを書いています</h2>
+                    <p class="section-description">あなたの回答を元に、詳しく解析しています</p>
+
+                    <!-- 3段階プログレス -->
+                    <div class="generation-stages">
+                        <div class="stage" id="stage-overview">
+                            <div class="stage-indicator">
+                                <div class="stage-dot"></div>
+                            </div>
+                            <span class="stage-label">動画の概要把握</span>
+                        </div>
+                        <div class="stage" id="stage-confirmation">
+                            <div class="stage-indicator">
+                                <div class="stage-dot"></div>
+                            </div>
+                            <span class="stage-label">内容の確認</span>
+                        </div>
+                        <div class="stage" id="stage-generation">
+                            <div class="stage-indicator">
+                                <div class="stage-dot"></div>
+                            </div>
+                            <span class="stage-label">詳細なドキュメント生成</span>
+                        </div>
+
+                        <div class="progress-bar-container">
+                            <div class="progress-bar gradient" id="phase2-progress-bar"></div>
+                        </div>
+                        <div class="progress-info">
+                            <span class="current-task" id="phase2-task">動画全体を分析中...</span>
+                            <span class="progress-percent" id="phase2-progress">0%</span>
+                        </div>
+                    </div>
+
+                    <!-- 生成中のドキュメント -->
+                    <div class="generated-steps" id="generated-steps" style="display: none;">
+                        <div class="steps-header">
+                            <span class="live-dot"></span>
+                            <h3>生成中のドキュメント</h3>
+                        </div>
+                        <div class="steps-list" id="steps-list">
+                            <!-- ステップがここに追加される -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Step: Complete -->
+            <section id="step-complete" class="step">
+                <div class="complete-content">
+                    <div class="complete-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                    </div>
+                    <h2 class="complete-title">できました!お疲れさまでした</h2>
+                    <p class="complete-description">
+                        引継ぎドキュメントが完成。<br>
+                        <span class="accent-text">あとは提出するだけです</span>
+                    </p>
+
+                    <!-- 生成されたドキュメント -->
+                    <div class="document-preview">
+                        <div class="document-header">
+                            <h3 id="document-title">顧客管理システムへのデータ入力</h3>
+                            <p id="document-duration">推定所要時間: 約15分</p>
+                        </div>
+                        <div class="document-body">
+                            <h4>手順</h4>
+                            <div class="document-steps" id="document-steps">
+                                <!-- 完成したステップがここに表示される -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- アクション -->
+                    <div class="complete-actions">
+                        <button type="button" class="btn-primary-large" id="download-btn">
+                            ドキュメントをダウンロード
+                        </button>
+                        <button type="button" class="btn-secondary-large" id="restart-btn">
+                            もう一度作成する
                         </button>
                     </div>
                 </div>
             </section>
 
-            <!-- Phase 4: 詳細解析中 -->
-            <section id="analyzing-phase" class="phase">
-                <div class="phase-content center">
-                    <div class="spinner large"></div>
-                    <h2 class="phase-title">詳細解析中...</h2>
-                    <p class="phase-description">動画全体を分析しています。しばらくお待ちください。</p>
-                    <p class="encouraging-message" id="encouraging-message">もうすぐ完成です！</p>
-                </div>
-            </section>
-
-            <!-- Phase 5: 完了 / プレビュー -->
-            <section id="complete-phase" class="phase">
-                <div class="phase-content split-view">
-                    <!-- 左: エディタ -->
-                    <div class="editor-pane">
-                        <div class="pane-header">
-                            <h3>解析結果</h3>
-                            <button class="btn btn-small" id="generate-doc-btn">ドキュメント生成</button>
-                        </div>
-                        <div class="editor-content" id="analysis-result"></div>
-                    </div>
-
-                    <!-- 右: プレビュー -->
-                    <div class="preview-pane">
-                        <div class="pane-header">
-                            <h3>プレビュー</h3>
-                            <button class="btn btn-small btn-secondary" id="copy-btn">コピー</button>
-                        </div>
-                        <div class="preview-content" id="document-preview">
-                            <p class="placeholder-text">「ドキュメント生成」をクリックするとプレビューが表示されます</p>
-                        </div>
-                    </div>
-                </div>
-            </section>
         </main>
-
-        <!-- フッター -->
-        <footer class="footer">
-            <p>お疲れ様でした！ 引継ぎくんがサポートします。</p>
-        </footer>
     </div>
 
     <!-- Hidden session ID -->
