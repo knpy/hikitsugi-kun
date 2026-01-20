@@ -1,6 +1,6 @@
 /**
  * 引継ぎくん - フロントエンドアプリケーション
- * htmx + Vanilla JS
+ * htmx + Vanilla JS (v0デザイン移植版)
  */
 
 // ==========================================================================
@@ -8,100 +8,194 @@
 // ==========================================================================
 const state = {
     sessionId: null,
-    currentPhase: 'upload',
+    currentStep: 'welcome',
     eventSource: null,
+
+    // ファイル情報
+    fileName: '',
+    fileSize: 0,
+
+    // 質問関連
+    questions: [
+        {
+            id: 'handoverTo',
+            question: '誰に引き継ぎますか?',
+            type: 'text'
+        },
+        {
+            id: 'projectName',
+            question: 'プロジェクト名・業務名を教えてください',
+            type: 'text'
+        },
+        {
+            id: 'skillLevel',
+            question: '引き継ぐ相手のITスキルはどれくらいですか?',
+            type: 'choice',
+            options: [
+                { value: 'beginner', label: '初心者' },
+                { value: 'intermediate', label: '中級者' },
+                { value: 'advanced', label: '上級者' }
+            ]
+        },
+        {
+            id: 'purpose',
+            question: 'この作業の目的は何ですか?',
+            type: 'choice',
+            options: [
+                { value: 'new_data', label: '新規データの登録' },
+                { value: 'update_data', label: '既存データの更新' },
+                { value: 'report', label: 'レポート作成' },
+                { value: 'other', label: 'その他' }
+            ]
+        }
+    ],
+    currentQuestionIndex: 0,
+    answers: [],
+
+    // AI理解
+    aiUnderstanding: {
+        taskType: '顧客管理システムへのデータ入力',
+        estimatedSteps: 7,
+        tools: ['Chrome', 'Excel', '社内システム'],
+        duration: '約15分'
+    },
+
+    // 生成されたステップ
+    generatedSteps: [],
+
+    // Phase2の状態
+    phase2Stage: 'overview',
+    phase2Progress: 0,
 };
 
 // ==========================================================================
 // DOM Elements
 // ==========================================================================
-const elements = {
-    // Phases
-    uploadPhase: document.getElementById('upload-phase'),
-    processingPhase: document.getElementById('processing-phase'),
-    policyPhase: document.getElementById('policy-phase'),
-    analyzingPhase: document.getElementById('analyzing-phase'),
-    completePhase: document.getElementById('complete-phase'),
+const getElements = () => ({
+    // Steps
+    stepWelcome: document.getElementById('step-welcome'),
+    stepUpload: document.getElementById('step-upload'),
+    stepUploading: document.getElementById('step-uploading'),
+    stepPhase1: document.getElementById('step-phase1'),
+    stepQuestions: document.getElementById('step-questions'),
+    stepPhase2: document.getElementById('step-phase2'),
+    stepComplete: document.getElementById('step-complete'),
+
+    // Step indicator
+    stepIndicator: document.getElementById('step-indicator'),
+
+    // Welcome
+    startUploadBtn: document.getElementById('start-upload-btn'),
 
     // Upload
     dropZone: document.getElementById('drop-zone'),
     fileInput: document.getElementById('file-input'),
-    businessTitle: document.getElementById('business-title'),
-    authorName: document.getElementById('author-name'),
-    additionalNotes: document.getElementById('additional-notes'),
+    uploadIcon: document.getElementById('upload-icon'),
+    uploadText: document.getElementById('upload-text'),
+    backToWelcome: document.getElementById('back-to-welcome'),
 
-    // Processing
-    statusText: document.getElementById('status-text'),
-    stepUpload: document.getElementById('step-upload'),
-    stepProcess: document.getElementById('step-process'),
-    stepAnalyze: document.getElementById('step-analyze'),
+    // Uploading
+    fileNameEl: document.getElementById('file-name'),
+    fileSizeEl: document.getElementById('file-size'),
+    uploadProgress: document.getElementById('upload-progress'),
+    progressText: document.getElementById('progress-text'),
 
-    // Question
-    questionCard: document.getElementById('question-card'),
+    // Phase1
+    phase1Progress: document.getElementById('phase1-progress'),
+    phase1ProgressBar: document.getElementById('phase1-progress-bar'),
+    currentTimestamp: document.getElementById('current-timestamp'),
+    currentRecognition: document.getElementById('current-recognition'),
+
+    // Questions
+    questionsHeader: document.getElementById('questions-header'),
+    aiUnderstanding: document.getElementById('ai-understanding'),
+    aiTaskType: document.getElementById('ai-task-type'),
+    aiEstimatedSteps: document.getElementById('ai-estimated-steps'),
+    aiTools: document.getElementById('ai-tools'),
+    aiDuration: document.getElementById('ai-duration'),
+    chatMessages: document.getElementById('chat-messages'),
+    currentQuestion: document.getElementById('current-question'),
     questionText: document.getElementById('question-text'),
+    textInputArea: document.getElementById('text-input-area'),
     questionInput: document.getElementById('question-input'),
-    skipBtn: document.getElementById('skip-btn'),
-    answerBtn: document.getElementById('answer-btn'),
+    sendBtn: document.getElementById('send-btn'),
+    choiceOptions: document.getElementById('choice-options'),
+    questionProgress: document.getElementById('question-progress'),
 
-    // Policy
-    policyTextarea: document.getElementById('policy-textarea'),
-    startAnalysisBtn: document.getElementById('start-analysis-btn'),
-
-    // Analyzing
-    encouragingMessage: document.getElementById('encouraging-message'),
+    // Phase2
+    stageOverview: document.getElementById('stage-overview'),
+    stageConfirmation: document.getElementById('stage-confirmation'),
+    stageGeneration: document.getElementById('stage-generation'),
+    phase2ProgressBar: document.getElementById('phase2-progress-bar'),
+    phase2Task: document.getElementById('phase2-task'),
+    phase2ProgressText: document.getElementById('phase2-progress'),
+    generatedSteps: document.getElementById('generated-steps'),
+    stepsList: document.getElementById('steps-list'),
 
     // Complete
-    analysisResult: document.getElementById('analysis-result'),
-    documentPreview: document.getElementById('document-preview'),
-    generateDocBtn: document.getElementById('generate-doc-btn'),
-    copyBtn: document.getElementById('copy-btn'),
+    documentTitle: document.getElementById('document-title'),
+    documentDuration: document.getElementById('document-duration'),
+    documentSteps: document.getElementById('document-steps'),
+    downloadBtn: document.getElementById('download-btn'),
+    restartBtn: document.getElementById('restart-btn'),
 
     // Hidden
     sessionIdInput: document.getElementById('session-id'),
-};
+});
+
+let elements = {};
 
 // ==========================================================================
-// Phase Management
+// Step Management
 // ==========================================================================
-function showPhase(phaseName) {
-    // Hide all phases
-    document.querySelectorAll('.phase').forEach(phase => {
-        phase.classList.remove('active');
+const STEPS = ['welcome', 'upload', 'uploading', 'phase1', 'questions', 'phase2', 'complete'];
+
+function showStep(stepName) {
+    // Hide all steps
+    document.querySelectorAll('.step').forEach(step => {
+        step.classList.remove('active');
     });
 
-    // Show target phase
-    const targetPhase = document.getElementById(`${phaseName}-phase`);
-    if (targetPhase) {
-        targetPhase.classList.add('active');
-        state.currentPhase = phaseName;
+    // Show target step
+    const targetStep = document.getElementById(`step-${stepName}`);
+    if (targetStep) {
+        targetStep.classList.add('active');
+        state.currentStep = stepName;
     }
+
+    // Update step indicator
+    updateStepIndicator(stepName);
 }
 
-function updateProgressSteps(currentStep) {
-    const steps = ['upload', 'process', 'analyze'];
-    const currentIndex = steps.indexOf(currentStep);
+function updateStepIndicator(currentStep) {
+    const currentIndex = STEPS.indexOf(currentStep);
 
-    steps.forEach((step, index) => {
-        const stepElement = document.getElementById(`step-${step}`);
-        if (!stepElement) return;
+    document.querySelectorAll('.step-dot').forEach((dot, index) => {
+        dot.classList.remove('active', 'past');
 
-        stepElement.classList.remove('active', 'completed');
-
-        if (index < currentIndex) {
-            stepElement.classList.add('completed');
-        } else if (index === currentIndex) {
-            stepElement.classList.add('active');
+        if (index === currentIndex) {
+            dot.classList.add('active');
+        } else if (index < currentIndex) {
+            dot.classList.add('past');
         }
     });
 }
 
 // ==========================================================================
-// File Upload
+// Welcome Step
 // ==========================================================================
-function setupDropZone() {
+function setupWelcomeStep() {
+    elements.startUploadBtn.addEventListener('click', () => {
+        showStep('upload');
+    });
+}
+
+// ==========================================================================
+// Upload Step
+// ==========================================================================
+function setupUploadStep() {
     const dropZone = elements.dropZone;
     const fileInput = elements.fileInput;
-    const selectFileBtn = document.getElementById('select-file-btn');
 
     // Drag & Drop events
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -110,33 +204,39 @@ function setupDropZone() {
 
     ['dragenter', 'dragover'].forEach(eventName => {
         dropZone.addEventListener(eventName, () => {
-            dropZone.classList.add('dragover');
+            dropZone.classList.add('dragging');
+            elements.uploadText.textContent = 'ここにドロップ';
         });
     });
 
     ['dragleave', 'drop'].forEach(eventName => {
         dropZone.addEventListener(eventName, () => {
-            dropZone.classList.remove('dragover');
+            dropZone.classList.remove('dragging');
+            elements.uploadText.textContent = 'ファイルをドロップ、またはクリック';
         });
     });
 
     dropZone.addEventListener('drop', (e) => {
         const files = e.dataTransfer.files;
         if (files.length > 0) {
-            handleFileUpload(files[0]);
+            handleFileSelect(files[0]);
         }
     });
 
-    // Click button to select file
-    selectFileBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
+    // Click to select file
+    dropZone.addEventListener('click', () => {
         fileInput.click();
     });
 
     fileInput.addEventListener('change', (e) => {
         if (e.target.files.length > 0) {
-            handleFileUpload(e.target.files[0]);
+            handleFileSelect(e.target.files[0]);
         }
+    });
+
+    // Back button
+    elements.backToWelcome.addEventListener('click', () => {
+        showStep('welcome');
     });
 }
 
@@ -145,26 +245,52 @@ function preventDefaults(e) {
     e.stopPropagation();
 }
 
-async function handleFileUpload(file) {
-    // Validate file size (2GB)
-    const maxSize = 2 * 1024 * 1024 * 1024;
+function handleFileSelect(file) {
+    // Validate file size (500MB for v0 design)
+    const maxSize = 500 * 1024 * 1024;
     if (file.size > maxSize) {
-        alert('ファイルが大きすぎます。2GB以下のファイルを選択してください。');
+        alert('ファイルが大きすぎます。500MB以下のファイルを選択してください。');
         return;
     }
 
-    // Show processing phase
-    showPhase('processing');
-    updateProgressSteps('upload');
-    elements.statusText.textContent = 'ファイルをアップロード中...';
+    state.fileName = file.name;
+    state.fileSize = file.size;
 
+    // Show uploading step
+    showStep('uploading');
+
+    // Update file info
+    elements.fileNameEl.textContent = file.name;
+    elements.fileSizeEl.textContent = (file.size / (1024 * 1024)).toFixed(1) + ' MB';
+
+    // Start upload
+    handleFileUpload(file);
+}
+
+// ==========================================================================
+// File Upload
+// ==========================================================================
+async function handleFileUpload(file) {
     // Prepare form data
     const formData = new FormData();
     formData.append('file', file);
     formData.append('session_id', state.sessionId);
-    formData.append('business_title', elements.businessTitle.value || '');
-    formData.append('author_name', elements.authorName.value || '');
-    formData.append('additional_notes', elements.additionalNotes.value || '');
+
+    // Simulate upload progress
+    let currentProgress = 0;
+    const uploadInterval = setInterval(() => {
+        currentProgress += Math.random() * 12;
+        if (currentProgress >= 100) {
+            currentProgress = 100;
+            clearInterval(uploadInterval);
+
+            // After upload complete, start phase1
+            setTimeout(() => {
+                startPhase1();
+            }, 500);
+        }
+        updateUploadProgress(currentProgress);
+    }, 200);
 
     try {
         const response = await fetch('/api/upload', {
@@ -173,29 +299,392 @@ async function handleFileUpload(file) {
         });
 
         if (!response.ok) {
+            clearInterval(uploadInterval);
             const error = await response.json();
             throw new Error(error.detail || 'アップロードに失敗しました');
         }
 
         const data = await response.json();
+        console.log('Upload response:', data);
 
-        if (data.status === 'processing') {
-            // Start SSE for status updates
-            updateProgressSteps('process');
-            elements.statusText.textContent = '動画を処理中...';
-            startEventStream();
-        } else {
-            // Non-video file, go directly to complete
-            showPhase('complete');
-        }
     } catch (error) {
+        clearInterval(uploadInterval);
         alert(`エラー: ${error.message}`);
-        showPhase('upload');
+        showStep('upload');
     }
 }
 
+function updateUploadProgress(progress) {
+    elements.uploadProgress.style.width = `${progress}%`;
+    elements.progressText.textContent = `${Math.round(progress)}%`;
+}
+
 // ==========================================================================
-// Server-Sent Events
+// Phase 1: 軽量解析
+// ==========================================================================
+function startPhase1() {
+    showStep('phase1');
+
+    const recognitions = [
+        { time: '00:12', text: 'ブラウザを起動' },
+        { time: '00:32', text: 'ログイン画面を発見' },
+        { time: '01:05', text: '認証情報を入力中' },
+        { time: '01:45', text: 'メニュー画面を操作' },
+        { time: '02:20', text: 'データ入力フォームにアクセス' },
+        { time: '03:10', text: 'Excel ファイルを開く' },
+        { time: '04:15', text: 'データをコピー&ペースト' },
+        { time: '04:50', text: '保存ボタンをクリック' }
+    ];
+
+    let index = 0;
+    const phase1Interval = setInterval(() => {
+        if (index < recognitions.length) {
+            elements.currentTimestamp.textContent = recognitions[index].time;
+            elements.currentRecognition.textContent = recognitions[index].text;
+
+            const progress = ((index + 1) / recognitions.length) * 100;
+            elements.phase1Progress.textContent = `${Math.round(progress)}%`;
+            elements.phase1ProgressBar.style.width = `${progress}%`;
+
+            index++;
+        } else {
+            clearInterval(phase1Interval);
+            setTimeout(() => {
+                showStep('questions');
+                setupQuestionsUI();
+            }, 1000);
+        }
+    }, 600);
+}
+
+// ==========================================================================
+// Questions Step
+// ==========================================================================
+function setupQuestionsUI() {
+    // Reset question state
+    state.currentQuestionIndex = 0;
+    state.answers = [];
+
+    // Update AI understanding display
+    elements.aiTaskType.textContent = state.aiUnderstanding.taskType;
+    elements.aiEstimatedSteps.textContent = `約${state.aiUnderstanding.estimatedSteps}個`;
+    elements.aiTools.textContent = state.aiUnderstanding.tools.join('、');
+    elements.aiDuration.textContent = state.aiUnderstanding.duration;
+
+    // Clear chat messages
+    elements.chatMessages.innerHTML = '';
+
+    // Show header and AI understanding (first question only)
+    elements.questionsHeader.style.display = 'block';
+    elements.aiUnderstanding.style.display = 'block';
+
+    // Setup question progress dots
+    setupQuestionProgress();
+
+    // Show first question
+    showCurrentQuestion();
+}
+
+function setupQuestionProgress() {
+    elements.questionProgress.innerHTML = '';
+    state.questions.forEach((_, idx) => {
+        const dot = document.createElement('div');
+        dot.className = 'progress-dot';
+        if (idx === 0) dot.classList.add('current');
+        elements.questionProgress.appendChild(dot);
+    });
+}
+
+function updateQuestionProgress() {
+    const dots = elements.questionProgress.querySelectorAll('.progress-dot');
+    dots.forEach((dot, idx) => {
+        dot.classList.remove('current', 'completed');
+        if (idx < state.currentQuestionIndex) {
+            dot.classList.add('completed');
+        } else if (idx === state.currentQuestionIndex) {
+            dot.classList.add('current');
+        }
+    });
+}
+
+function showCurrentQuestion() {
+    const question = state.questions[state.currentQuestionIndex];
+
+    // Hide header and AI understanding after first question
+    if (state.currentQuestionIndex > 0) {
+        elements.questionsHeader.style.display = 'none';
+        elements.aiUnderstanding.style.display = 'none';
+    }
+
+    // Update question text
+    elements.questionText.textContent = question.question;
+
+    // Show appropriate input type
+    if (question.type === 'text') {
+        elements.textInputArea.style.display = 'flex';
+        elements.choiceOptions.style.display = 'none';
+        elements.questionInput.value = '';
+        elements.questionInput.focus();
+    } else {
+        elements.textInputArea.style.display = 'none';
+        elements.choiceOptions.style.display = 'grid';
+        renderChoiceOptions(question.options);
+    }
+
+    updateQuestionProgress();
+}
+
+function renderChoiceOptions(options) {
+    elements.choiceOptions.innerHTML = '';
+    options.forEach(option => {
+        const btn = document.createElement('button');
+        btn.className = 'choice-button';
+        btn.textContent = option.label;
+        btn.addEventListener('click', () => handleAnswerSubmit(option.label));
+        elements.choiceOptions.appendChild(btn);
+    });
+}
+
+function setupQuestionsStep() {
+    // Text input submit
+    elements.sendBtn.addEventListener('click', () => {
+        const value = elements.questionInput.value.trim();
+        if (value) {
+            handleAnswerSubmit(value);
+        }
+    });
+
+    elements.questionInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            const value = elements.questionInput.value.trim();
+            if (value) {
+                handleAnswerSubmit(value);
+            }
+        }
+    });
+}
+
+function handleAnswerSubmit(answer) {
+    const currentQuestion = state.questions[state.currentQuestionIndex];
+
+    // Add to answers
+    state.answers.push({
+        questionId: currentQuestion.id,
+        answer: answer
+    });
+
+    // Add to chat history
+    addToChatHistory(currentQuestion.question, answer);
+
+    // Clear input
+    elements.questionInput.value = '';
+
+    // Next question or phase2
+    if (state.currentQuestionIndex < state.questions.length - 1) {
+        state.currentQuestionIndex++;
+        setTimeout(() => showCurrentQuestion(), 300);
+    } else {
+        setTimeout(() => startPhase2(), 500);
+    }
+}
+
+function addToChatHistory(question, answer) {
+    const messageHtml = `
+        <div class="chat-message">
+            <div class="ai-message">
+                <div class="ai-avatar">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 3l1.45 2.9L17 6.5l-2.18 2.18L15.36 13 12 11.18 8.64 13l.54-4.32L7 6.5l3.55-.6L12 3z"/>
+                    </svg>
+                </div>
+                <p class="ai-question-text">${question}</p>
+            </div>
+            <div class="user-answer">
+                <div class="answer-bubble">${answer}</div>
+            </div>
+        </div>
+    `;
+    elements.chatMessages.insertAdjacentHTML('beforeend', messageHtml);
+}
+
+// ==========================================================================
+// Phase 2: 本格解析
+// ==========================================================================
+function startPhase2() {
+    showStep('phase2');
+    state.phase2Stage = 'overview';
+    state.phase2Progress = 0;
+    state.generatedSteps = [];
+
+    const phase2Tasks = [
+        { stage: 'overview', task: '動画全体を分析中...', duration: 2000 },
+        { stage: 'confirmation', task: '内容を確認中...', duration: 2000 },
+        { stage: 'generation', task: 'ステップ1の説明を生成中...', duration: 1800 },
+        { stage: 'generation', task: 'スクリーンショットを抽出中...', duration: 1800 },
+        { stage: 'generation', task: '注意点を洗い出し中...', duration: 1800 },
+        { stage: 'generation', task: '用語集を作成中...', duration: 1800 },
+        { stage: 'generation', task: '初心者向けの補足を追加中...', duration: 1800 }
+    ];
+
+    const steps = [
+        'ブラウザを開き、社内システムにアクセスする',
+        'ログイン画面でメールアドレスとパスワードを入力する',
+        'メニューから「顧客管理」を選択する',
+        'データ入力フォームを開く',
+        'Excelファイルから必要なデータをコピーする',
+        'フォームに貼り付けて内容を確認する',
+        '保存ボタンをクリックして完了する'
+    ];
+
+    let taskIndex = 0;
+    let stepIndex = 0;
+
+    function executeNextTask() {
+        if (taskIndex >= phase2Tasks.length) {
+            setTimeout(() => showStep('complete'), 1500);
+            setupCompleteUI();
+            return;
+        }
+
+        const currentTask = phase2Tasks[taskIndex];
+        state.phase2Stage = currentTask.stage;
+        elements.phase2Task.textContent = currentTask.task;
+
+        // Update stage indicators
+        updatePhase2Stages(currentTask.stage);
+
+        // Update progress
+        if (currentTask.stage === 'overview') {
+            state.phase2Progress = 15;
+        } else if (currentTask.stage === 'confirmation') {
+            state.phase2Progress = 35;
+        } else if (currentTask.stage === 'generation') {
+            // Add generated step
+            if (stepIndex < steps.length) {
+                state.generatedSteps.push(steps[stepIndex]);
+                addGeneratedStep(steps[stepIndex], stepIndex);
+                stepIndex++;
+            }
+            state.phase2Progress = 35 + (stepIndex / steps.length) * 65;
+
+            // Show generated steps container
+            if (state.generatedSteps.length > 0) {
+                elements.generatedSteps.style.display = 'block';
+            }
+        }
+
+        elements.phase2ProgressBar.style.width = `${state.phase2Progress}%`;
+        elements.phase2ProgressText.textContent = `${Math.round(state.phase2Progress)}%`;
+
+        taskIndex++;
+        setTimeout(executeNextTask, currentTask.duration);
+    }
+
+    executeNextTask();
+}
+
+function updatePhase2Stages(currentStage) {
+    const stages = ['overview', 'confirmation', 'generation'];
+    const currentIndex = stages.indexOf(currentStage);
+
+    stages.forEach((stage, idx) => {
+        const el = document.getElementById(`stage-${stage}`);
+        if (!el) return;
+
+        el.classList.remove('active', 'completed');
+
+        if (idx < currentIndex) {
+            el.classList.add('completed');
+        } else if (idx === currentIndex) {
+            el.classList.add('active');
+        }
+    });
+}
+
+function addGeneratedStep(stepText, index) {
+    const stepHtml = `
+        <div class="step-item">
+            <div class="step-number">${index + 1}</div>
+            <p class="step-text">${stepText}</p>
+        </div>
+    `;
+    elements.stepsList.insertAdjacentHTML('beforeend', stepHtml);
+}
+
+// ==========================================================================
+// Complete Step
+// ==========================================================================
+function setupCompleteUI() {
+    // Update document preview
+    elements.documentTitle.textContent = state.aiUnderstanding.taskType;
+    elements.documentDuration.textContent = `推定所要時間: ${state.aiUnderstanding.duration}`;
+
+    // Clear and add steps
+    elements.documentSteps.innerHTML = '';
+    state.generatedSteps.forEach((step, idx) => {
+        const stepHtml = `
+            <div class="document-step">
+                <div class="step-number">${idx + 1}</div>
+                <p class="step-text">${step}</p>
+            </div>
+        `;
+        elements.documentSteps.insertAdjacentHTML('beforeend', stepHtml);
+    });
+}
+
+function setupCompleteStep() {
+    elements.downloadBtn.addEventListener('click', async () => {
+        try {
+            const response = await fetch('/api/generate-document', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    session_id: state.sessionId,
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error('ドキュメント生成に失敗しました');
+            }
+
+            const data = await response.json();
+
+            // Download as markdown file
+            const blob = new Blob([data.document], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `引継ぎドキュメント_${new Date().toISOString().slice(0, 10)}.md`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+        } catch (error) {
+            alert(`エラー: ${error.message}`);
+        }
+    });
+
+    elements.restartBtn.addEventListener('click', () => {
+        // Reset state
+        state.currentQuestionIndex = 0;
+        state.answers = [];
+        state.generatedSteps = [];
+        state.phase2Progress = 0;
+
+        // Clear generated steps list
+        elements.stepsList.innerHTML = '';
+        elements.generatedSteps.style.display = 'none';
+
+        // Go back to welcome
+        showStep('welcome');
+    });
+}
+
+// ==========================================================================
+// Server-Sent Events (for real API integration)
 // ==========================================================================
 function startEventStream() {
     if (state.eventSource) {
@@ -211,7 +700,10 @@ function startEventStream() {
 
     state.eventSource.addEventListener('scoping', (e) => {
         const data = JSON.parse(e.data);
-        handleScopingResult(data.result);
+        // Update AI understanding from server
+        if (data.result) {
+            state.aiUnderstanding.taskType = data.result;
+        }
     });
 
     state.eventSource.addEventListener('done', (e) => {
@@ -221,217 +713,50 @@ function startEventStream() {
 
     state.eventSource.addEventListener('error', (e) => {
         console.error('SSE Error:', e);
-        // Try to reconnect after 5 seconds
-        setTimeout(() => {
-            if (state.currentPhase === 'processing') {
-                startEventStream();
-            }
-        }, 5000);
     });
 }
 
 function handlePhaseChange(phase) {
     switch (phase) {
-        case 'uploading':
-            updateProgressSteps('upload');
-            elements.statusText.textContent = 'ファイルをアップロード中...';
-            break;
         case 'processing':
-            updateProgressSteps('process');
-            elements.statusText.textContent = '動画を処理中...';
+            // Already handled by upload flow
             break;
         case 'questioning':
-            updateProgressSteps('analyze');
-            elements.statusText.textContent = 'AI分析中...';
+            showStep('questions');
+            setupQuestionsUI();
             break;
         case 'analyzing':
-            showPhase('analyzing');
-            startEncouragingMessages();
+            startPhase2();
             break;
         case 'complete':
-            fetchAnalysisResult();
+            showStep('complete');
+            setupCompleteUI();
             break;
         case 'error':
             alert('処理中にエラーが発生しました。');
-            showPhase('upload');
+            showStep('welcome');
             break;
     }
-}
-
-function handleScopingResult(result) {
-    // Move to policy phase
-    showPhase('policy');
-    elements.policyTextarea.value = result;
-}
-
-// ==========================================================================
-// Policy Phase
-// ==========================================================================
-function setupPolicyPhase() {
-    elements.startAnalysisBtn.addEventListener('click', async () => {
-        const policy = elements.policyTextarea.value;
-
-        // Update policy on server
-        try {
-            await fetch('/api/policy', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    session_id: state.sessionId,
-                    policy: policy,
-                }),
-            });
-
-            // Start analysis
-            showPhase('analyzing');
-            startEncouragingMessages();
-
-            const response = await fetch(`/api/analyze/${state.sessionId}`, {
-                method: 'POST',
-            });
-
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.detail || '解析に失敗しました');
-            }
-
-            const data = await response.json();
-            showAnalysisResult(data.analysis);
-
-        } catch (error) {
-            alert(`エラー: ${error.message}`);
-            showPhase('policy');
-        }
-    });
-}
-
-// ==========================================================================
-// Analyzing Phase
-// ==========================================================================
-const encouragingMessages = [
-    'もうすぐ完成です！',
-    '動画を詳しく分析しています...',
-    '重要なポイントを抽出中...',
-    'チェックリストを確認しています...',
-    'あと少しで完了します！',
-];
-
-let messageIndex = 0;
-let messageInterval = null;
-
-function startEncouragingMessages() {
-    messageIndex = 0;
-    updateEncouragingMessage();
-
-    messageInterval = setInterval(() => {
-        messageIndex = (messageIndex + 1) % encouragingMessages.length;
-        updateEncouragingMessage();
-    }, 5000);
-}
-
-function updateEncouragingMessage() {
-    if (elements.encouragingMessage) {
-        elements.encouragingMessage.textContent = encouragingMessages[messageIndex];
-    }
-}
-
-function stopEncouragingMessages() {
-    if (messageInterval) {
-        clearInterval(messageInterval);
-        messageInterval = null;
-    }
-}
-
-// ==========================================================================
-// Complete Phase
-// ==========================================================================
-async function fetchAnalysisResult() {
-    try {
-        const response = await fetch(`/api/analysis/${state.sessionId}`);
-        if (!response.ok) {
-            throw new Error('結果の取得に失敗しました');
-        }
-        const data = await response.json();
-        showAnalysisResult(data.video_analysis);
-    } catch (error) {
-        console.error('Error fetching analysis:', error);
-    }
-}
-
-function showAnalysisResult(analysis) {
-    stopEncouragingMessages();
-    showPhase('complete');
-
-    // Show raw analysis in editor
-    elements.analysisResult.textContent = analysis;
-}
-
-function setupCompletePhase() {
-    // Generate document button
-    elements.generateDocBtn.addEventListener('click', async () => {
-        elements.generateDocBtn.disabled = true;
-        elements.generateDocBtn.textContent = '生成中...';
-
-        try {
-            const response = await fetch('/api/generate-document', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    session_id: state.sessionId,
-                }),
-            });
-
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.detail || 'ドキュメント生成に失敗しました');
-            }
-
-            const data = await response.json();
-
-            // Render markdown preview
-            elements.documentPreview.innerHTML = marked.parse(data.document);
-
-        } catch (error) {
-            alert(`エラー: ${error.message}`);
-        } finally {
-            elements.generateDocBtn.disabled = false;
-            elements.generateDocBtn.textContent = 'ドキュメント生成';
-        }
-    });
-
-    // Copy button
-    elements.copyBtn.addEventListener('click', async () => {
-        const content = elements.documentPreview.innerText;
-        try {
-            await navigator.clipboard.writeText(content);
-            elements.copyBtn.textContent = 'コピーしました！';
-            setTimeout(() => {
-                elements.copyBtn.textContent = 'コピー';
-            }, 2000);
-        } catch (error) {
-            console.error('Copy failed:', error);
-        }
-    });
 }
 
 // ==========================================================================
 // Initialization
 // ==========================================================================
 function init() {
+    // Get DOM elements
+    elements = getElements();
+
     // Get session ID from hidden input
     state.sessionId = elements.sessionIdInput.value;
 
     // Setup event listeners
-    setupDropZone();
-    setupPolicyPhase();
-    setupCompletePhase();
+    setupWelcomeStep();
+    setupUploadStep();
+    setupQuestionsStep();
+    setupCompleteStep();
 
-    // Show initial phase
-    showPhase('upload');
+    // Show initial step
+    showStep('welcome');
 }
 
 // Start when DOM is ready
