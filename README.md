@@ -2,14 +2,22 @@
 
 業務引継ぎを支援するAIアプリケーション。動画や資料から詳細な引継ぎドキュメントを自動生成します。
 
-## 機能
+## 📚 プロジェクトドキュメント
 
+開発状況やタスク管理については、以下のドキュメントを参照してください：
+
+- 📊 **[実装状況整理](file:///.gemini/antigravity/brain/770cb451-012a-4e41-8701-1ffca33a88f7/implementation_status.md)** - Streamlit→HTMX移行後の実装状況
+- 📋 **[タスクリスト](file:///.gemini/antigravity/brain/770cb451-012a-4e41-8701-1ffca33a88f7/task.md)** - 開発タスクと進捗管理
+- 📖 **[タスク管理ガイド](file:///.gemini/antigravity/brain/770cb451-012a-4e41-8701-1ffca33a88f7/task_management_guide.md)** - GitHub Issueとの連携方法
+- 📝 **[Phase 1 実装計画](file:///.gemini/antigravity/brain/770cb451-012a-4e41-8701-1ffca33a88f7/phase1_implementation_plan.md)** - SSE接続の詳細実装手順
+
+## ✨ 機能
+
+- **Human-in-the-Loop分析**: 冒頭5分の初期分析 → 質問 → 詳細解析の3段階フロー
 - 動画（MP4/MOV/AVI/WebM）からの業務手順抽出
-- PDF/Excel/Word資料の分析
 - タイムスタンプ付き操作手順の生成
 - 6カテゴリの詳細チェックリスト
 - Notion貼り付け用Markdownドキュメント生成
-- 動画フレームの自動抽出・可視化
 
 ## セットアップ
 
@@ -58,10 +66,11 @@ ffmpeg -version
 ### 3. 起動
 
 ```bash
-streamlit run app.py
+# FastAPIアプリを起動
+python main.py
 ```
 
-ブラウザで `http://localhost:8501` が開きます。
+ブラウザで `http://localhost:8000` が開きます（自動でポート検索）。
 
 ## 使い方
 
@@ -94,11 +103,33 @@ Google AI Studioで[APIキーを取得](https://aistudio.google.com/app/apikey)�
 
 ## 技術スタック
 
-- **フロントエンド**: Streamlit
+- **バックエンド**: FastAPI
+- **フロントエンド**: HTMX + Vanilla JavaScript
+- **UI**: カスタムCSS（v0デザイン）
 - **AI**: Google Gemini API (gemini-2.5-flash-lite)
 - **動画処理**: FFmpeg + ffmpeg-python
 - **画像処理**: Pillow
 - **言語**: Python 3.14
+
+## アーキテクチャ
+
+```
+hikitsugi-kun/
+├── main.py                 # FastAPIアプリケーションエントリーポイント
+├── routes/                 # APIルート定義
+│   ├── upload.py          # ファイルアップロード + バックグラウンド処理
+│   ├── questions.py       # SSEストリーム + 詳細解析
+│   └── document.py        # ドキュメント生成
+├── services/              # ビジネスロジック
+│   ├── gemini.py         # Gemini API連携
+│   └── session.py        # セッション管理
+├── templates/             # Jinja2テンプレート
+│   └── index.html        # メインSPA
+├── static/                # 静的ファイル
+│   ├── css/style.css     # カスタムスタイル
+│   └── js/app.js         # フロントエンドロジック
+└── frame_extractor.py     # 動画フレーム抽出
+```
 
 ## チェックリストカテゴリ
 

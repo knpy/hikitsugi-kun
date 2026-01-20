@@ -276,18 +276,13 @@ async function handleFileUpload(file) {
     formData.append('file', file);
     formData.append('session_id', state.sessionId);
 
-    // Simulate upload progress
+    // Simulate upload progress (TODO: Replace with actual upload progress tracking)
     let currentProgress = 0;
     const uploadInterval = setInterval(() => {
         currentProgress += Math.random() * 12;
         if (currentProgress >= 100) {
             currentProgress = 100;
             clearInterval(uploadInterval);
-
-            // After upload complete, start phase1
-            setTimeout(() => {
-                startPhase1();
-            }, 500);
         }
         updateUploadProgress(currentProgress);
     }, 200);
@@ -306,6 +301,17 @@ async function handleFileUpload(file) {
 
         const data = await response.json();
         console.log('Upload response:', data);
+
+        // Clear the mock upload progress interval
+        clearInterval(uploadInterval);
+
+        // Ensure progress shows 100%
+        updateUploadProgress(100);
+
+        // Start SSE connection after successful upload
+        setTimeout(() => {
+            startEventStream();
+        }, 500);
 
     } catch (error) {
         clearInterval(uploadInterval);
@@ -686,16 +692,35 @@ function setupCompleteStep() {
 // ==========================================================================
 // Server-Sent Events (for real API integration)
 // ==========================================================================
-function startEventStream() {
+
+// SSE retry configuration
+const SSE_CONFIG = {
+    maxRetries: 5,
+    initialRetryDelay: 1000, // 1 second
+    maxRetryDelay: 30000, // 30 seconds
+};
+
+let sseRetryCount = 0;
+let sseRetryTimeout = null;
+
+function startEventStream(isRetry = false) {
     if (state.eventSource) {
         state.eventSource.close();
     }
+
+    if (!isRetry) {
+        sseRetryCount = 0;
+    }
+
+    console.log(`Starting SSE connection (attempt ${sseRetryCount + 1}/${SSE_CONFIG.maxRetries})...`);
 
     state.eventSource = new EventSource(`/api/events/${state.sessionId}`);
 
     state.eventSource.addEventListener('phase', (e) => {
         const data = JSON.parse(e.data);
         handlePhaseChange(data.phase);
+        // Reset retry count on successful event
+        sseRetryCount = 0;
     });
 
     state.eventSource.addEventListener('scoping', (e) => {
@@ -704,22 +729,96 @@ function startEventStream() {
         if (data.result) {
             state.aiUnderstanding.taskType = data.result;
         }
+        // Reset retry count on successful event
+        sseRetryCount = 0;
     });
 
     state.eventSource.addEventListener('done', (e) => {
+        console.log('SSE connection closed (done event)');
         state.eventSource.close();
         state.eventSource = null;
+        sseRetryCount = 0;
     });
 
     state.eventSource.addEventListener('error', (e) => {
         console.error('SSE Error:', e);
+
+        // Close the current connection
+        if (state.eventSource) {
+            state.eventSource.close();
+            state.eventSource = null;
+        }
+
+        // Clear any existing retry timeout
+        if (sseRetryTimeout) {
+            clearTimeout(sseRetryTimeout);
+            sseRetryTimeout = null;
+        }
+
+        // Check if we should retry
+        if (sseRetryCount < SSE_CONFIG.maxRetries) {
+            // Calculate exponential backoff delay
+            const retryDelay = Math.min(
+                SSE_CONFIG.initialRetryDelay * Math.pow(2, sseRetryCount),
+                SSE_CONFIG.maxRetryDelay
+            );
+
+            console.log(`Retrying SSE connection in ${retryDelay}ms...`);
+
+            sseRetryCount++;
+            sseRetryTimeout = setTimeout(() => {
+                startEventStream(true);
+            }, retryDelay);
+        } else {
+            // Max retries reached
+            console.error('Max SSE retries reached. Giving up.');
+            showErrorMessage('サーバーとの接続に失敗しました。ページをリロードしてください。');
+        }
+    });
+
+    state.eventSource.addEventListener('open', () => {
+        console.log('SSE connection established');
     });
 }
 
+function showErrorMessage(message) {
+    // Create error message UI if it doesn't exist
+    let errorContainer = document.getElementById('error-message');
+    if (!errorContainer) {
+        errorContainer = document.createElement('div');
+        errorContainer.id = 'error-message';
+        errorContainer.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #ef4444;
+            color: white;
+            padding: 16px 24px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            z-index: 9999;
+            max-width: 400px;
+            font-size: 14px;
+            line-height: 1.5;
+        `;
+        document.body.appendChild(errorContainer);
+    }
+    errorContainer.textContent = message;
+    errorContainer.style.display = 'block';
+}
+
 function handlePhaseChange(phase) {
-    switch (phase) {
+    console.log('Phase changed to:', phase);
+
+    switch (phase.toLowerCase()) {
+        case 'uploading':
+            // Show uploading screen with progress
+            showStep('uploading');
+            break;
         case 'processing':
-            // Already handled by upload flow
+            // Show Phase1 analysis screen
+            showStep('phase1');
+            // The actual progress will come from SSE 'scoping' events
             break;
         case 'questioning':
             showStep('questions');
@@ -736,6 +835,8 @@ function handlePhaseChange(phase) {
             alert('処理中にエラーが発生しました。');
             showStep('welcome');
             break;
+        default:
+            console.warn('Unknown phase:', phase);
     }
 }
 
