@@ -52,12 +52,12 @@ const state = {
     currentQuestionIndex: 0,
     answers: [],
 
-    // AI理解
+    // AI理解（スコーピング結果から動的に更新）
     aiUnderstanding: {
-        taskType: '顧客管理システムへのデータ入力',
-        estimatedSteps: 7,
-        tools: ['Chrome', 'Excel', '社内システム'],
-        duration: '約15分'
+        taskType: '',
+        estimatedSteps: 0,
+        tools: [],
+        duration: ''
     },
 
     // 生成されたステップ
@@ -346,16 +346,58 @@ function updatePhase1Progress(step, progress) {
 // ==========================================================================
 // Questions Step
 // ==========================================================================
+function parseScopingResult(scopingText) {
+    // スコーピング結果のテキストを解析してAI理解度を更新
+    console.log('Parsing scoping result:', scopingText);
+
+    // 【業務テーマ】セクションから抽出
+    const taskTypeMatch = scopingText.match(/【業務テーマ】\s*\n([^\n【]+)/);
+    if (taskTypeMatch) {
+        state.aiUnderstanding.taskType = taskTypeMatch[1].trim();
+    }
+
+    // 【解析方針案】セクションから項目を抽出（箇条書き）
+    const policyMatch = scopingText.match(/【解析方針案】\s*\n((?:[-•]\s*[^\n]+\n?)+)/);
+    if (policyMatch) {
+        const policyItems = policyMatch[1]
+            .split('\n')
+            .filter(line => line.trim().match(/^[-•]\s*/))
+            .map(line => line.replace(/^[-•]\s*/, '').trim())
+            .filter(item => item.length > 0);
+
+        // 推定ステップ数: 方針案の項目数を基準にする
+        if (policyItems.length > 0) {
+            state.aiUnderstanding.estimatedSteps = Math.max(3, policyItems.length * 2);
+        }
+    }
+
+    // ツール情報を抽出（キーワード検索）
+    const toolKeywords = ['Chrome', 'Excel', 'システム', 'ブラウザ', 'アプリ', 'ソフト'];
+    const foundTools = toolKeywords.filter(tool => scopingText.includes(tool));
+    if (foundTools.length > 0) {
+        state.aiUnderstanding.tools = foundTools.slice(0, 3); // 最大3つ
+    }
+
+    // 所要時間の推定（仮: 固定値）
+    state.aiUnderstanding.duration = '約15分';
+
+    console.log('Updated AI understanding:', state.aiUnderstanding);
+}
+
 function setupQuestionsUI() {
     // Reset question state
     state.currentQuestionIndex = 0;
     state.answers = [];
 
-    // Update AI understanding display
-    elements.aiTaskType.textContent = state.aiUnderstanding.taskType;
-    elements.aiEstimatedSteps.textContent = `約${state.aiUnderstanding.estimatedSteps}個`;
-    elements.aiTools.textContent = state.aiUnderstanding.tools.join('、');
-    elements.aiDuration.textContent = state.aiUnderstanding.duration;
+    // Update AI understanding display（空の場合はフォールバック）
+    elements.aiTaskType.textContent = state.aiUnderstanding.taskType || '解析中...';
+    elements.aiEstimatedSteps.textContent = state.aiUnderstanding.estimatedSteps > 0
+        ? `約${state.aiUnderstanding.estimatedSteps}個`
+        : '解析中...';
+    elements.aiTools.textContent = state.aiUnderstanding.tools.length > 0
+        ? state.aiUnderstanding.tools.join('、')
+        : '解析中...';
+    elements.aiDuration.textContent = state.aiUnderstanding.duration || '解析中...';
 
     // Clear chat messages
     elements.chatMessages.innerHTML = '';
@@ -465,12 +507,73 @@ function handleAnswerSubmit(answer) {
     // Clear input
     elements.questionInput.value = '';
 
-    // Next question or phase2
+    // Next question or detailed analysis
     if (state.currentQuestionIndex < state.questions.length - 1) {
         state.currentQuestionIndex++;
         setTimeout(() => showCurrentQuestion(), 300);
     } else {
-        setTimeout(() => startPhase2(), 500);
+        setTimeout(() => startDetailedAnalysis(), 500);
+    }
+}
+
+function formatAnswersAsPolicy(answers) {
+    // 回答配列をMarkdown形式のテキストに変換
+    const labels = {
+        'handoverTo': '【引き継ぎ先】',
+        'projectName': '【プロジェクト名】',
+        'skillLevel': '【ITスキル】',
+        'purpose': '【目的】'
+    };
+
+    let policy = '';
+    answers.forEach(answer => {
+        const label = labels[answer.questionId] || `【${answer.questionId}】`;
+        policy += `${label}\n${answer.answer}\n\n`;
+    });
+
+    return policy.trim();
+}
+
+async function startDetailedAnalysis() {
+    console.log('Starting detailed analysis...');
+
+    try {
+        // 回答をuser_policyフォーマットに変換
+        const policy = formatAnswersAsPolicy(state.answers);
+        console.log('Formatted policy:', policy);
+
+        // POST /api/policy でuser_policyを更新
+        const policyResponse = await fetch('/api/policy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                session_id: state.sessionId,
+                policy: policy
+            })
+        });
+
+        if (!policyResponse.ok) {
+            throw new Error(`Policy update failed: ${policyResponse.status}`);
+        }
+
+        console.log('User policy updated successfully');
+
+        // POST /api/analyze/{session_id} で詳細解析開始
+        const analyzeResponse = await fetch(`/api/analyze/${state.sessionId}`, {
+            method: 'POST'
+        });
+
+        if (!analyzeResponse.ok) {
+            throw new Error(`Detailed analysis start failed: ${analyzeResponse.status}`);
+        }
+
+        console.log('Detailed analysis started successfully');
+
+        // Phase2画面への遷移はSSEのphaseイベントで自動的に行われる
+
+    } catch (error) {
+        console.error('Failed to start detailed analysis:', error);
+        showErrorMessage('解析の開始に失敗しました。もう一度お試しください。');
     }
 }
 
@@ -720,7 +823,7 @@ function startEventStream(isRetry = false) {
         const data = JSON.parse(e.data);
         // Update AI understanding from server
         if (data.result) {
-            state.aiUnderstanding.taskType = data.result;
+            parseScopingResult(data.result);
         }
         // Reset retry count on successful event
         sseRetryCount = 0;
