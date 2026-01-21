@@ -66,6 +66,10 @@ const state = {
     // Phase2の状態
     phase2Stage: 'overview',
     phase2Progress: 0,
+
+    // Phase 5: 詳細解析結果とドキュメント
+    videoAnalysis: '',        // 詳細動画分析結果（Markdown）
+    generatedDocument: ''     // 生成済みドキュメント（Markdown）
 };
 
 // ==========================================================================
@@ -603,73 +607,90 @@ function startPhase2() {
     showStep('phase2');
     state.phase2Stage = 'overview';
     state.phase2Progress = 0;
-    state.generatedSteps = [];
 
-    const phase2Tasks = [
-        { stage: 'overview', task: '動画全体を分析中...', duration: 2000 },
-        { stage: 'confirmation', task: '内容を確認中...', duration: 2000 },
-        { stage: 'generation', task: 'ステップ1の説明を生成中...', duration: 1800 },
-        { stage: 'generation', task: 'スクリーンショットを抽出中...', duration: 1800 },
-        { stage: 'generation', task: '注意点を洗い出し中...', duration: 1800 },
-        { stage: 'generation', task: '用語集を作成中...', duration: 1800 },
-        { stage: 'generation', task: '初心者向けの補足を追加中...', duration: 1800 }
-    ];
+    // 解析中UIを表示
+    updatePhase2AnalyzingUI();
 
-    const steps = [
-        'ブラウザを開き、社内システムにアクセスする',
-        'ログイン画面でメールアドレスとパスワードを入力する',
-        'メニューから「顧客管理」を選択する',
-        'データ入力フォームを開く',
-        'Excelファイルから必要なデータをコピーする',
-        'フォームに貼り付けて内容を確認する',
-        '保存ボタンをクリックして完了する'
-    ];
+    // SSEのphaseイベントでANALYZINGフェーズを監視
+    // フェーズがCOMPLETEになったら解析完了処理を呼び出す
+}
 
-    let taskIndex = 0;
-    let stepIndex = 0;
+function updatePhase2AnalyzingUI() {
+    elements.phase2Task.textContent = '動画の内容を解析しています...';
+    updatePhase2Stages('overview');
+    // 進捗バーは表示するが、パーセンテージは更新しない（待機状態）
+}
 
-    function executeNextTask() {
-        if (taskIndex >= phase2Tasks.length) {
-            setTimeout(() => showStep('complete'), 1500);
-            setupCompleteUI();
-            return;
+async function handleAnalysisComplete() {
+    console.log('Analysis complete, fetching results...');
+
+    try {
+        // 1. GET /api/analysis/{session_id} で解析結果を取得
+        const analysisResponse = await fetch(`/api/analysis/${state.sessionId}`);
+        if (!analysisResponse.ok) {
+            throw new Error(`Failed to fetch analysis: ${analysisResponse.status}`);
         }
 
-        const currentTask = phase2Tasks[taskIndex];
-        state.phase2Stage = currentTask.stage;
-        elements.phase2Task.textContent = currentTask.task;
+        const analysisData = await analysisResponse.json();
 
-        // Update stage indicators
-        updatePhase2Stages(currentTask.stage);
+        // 2. video_analysisをstateに保存
+        state.videoAnalysis = analysisData.video_analysis;
+        console.log('Video analysis saved:', state.videoAnalysis);
 
-        // Update progress
-        if (currentTask.stage === 'overview') {
-            state.phase2Progress = 15;
-        } else if (currentTask.stage === 'confirmation') {
-            state.phase2Progress = 35;
-        } else if (currentTask.stage === 'generation') {
-            // Add generated step
-            if (stepIndex < steps.length) {
-                state.generatedSteps.push(steps[stepIndex]);
-                addGeneratedStep(steps[stepIndex], stepIndex);
-                stepIndex++;
-            }
-            state.phase2Progress = 35 + (stepIndex / steps.length) * 65;
+        // 3. UI更新（解析完了 → ドキュメント生成開始）
+        elements.phase2Task.textContent = 'ドキュメントを生成中...';
+        updatePhase2Stages('generation');
+        // 進捗バーは引き続き待機状態（一括処理のため）
 
-            // Show generated steps container
-            if (state.generatedSteps.length > 0) {
-                elements.generatedSteps.style.display = 'block';
-            }
-        }
+        // 4. POST /api/generate-document でドキュメント生成開始
+        await generateDocument();
 
-        elements.phase2ProgressBar.style.width = `${state.phase2Progress}%`;
-        elements.phase2ProgressText.textContent = `${Math.round(state.phase2Progress)}%`;
-
-        taskIndex++;
-        setTimeout(executeNextTask, currentTask.duration);
+    } catch (error) {
+        console.error('Failed to complete analysis:', error);
+        showErrorMessage('解析結果の取得に失敗しました');
     }
+}
 
-    executeNextTask();
+async function generateDocument() {
+    console.log('Generating document...');
+
+    try {
+        // POST /api/generate-document でドキュメント生成
+        const response = await fetch('/api/generate-document', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                session_id: state.sessionId
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`Document generation failed: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        // 生成されたドキュメントをstateに保存
+        state.generatedDocument = data.document;
+        console.log('Document generated successfully');
+
+        // UI更新（完了）
+        state.phase2Progress = 100;
+        elements.phase2ProgressBar.style.width = '100%';
+        elements.phase2ProgressText.textContent = '100%';
+        updatePhase2Stages('generation');
+        elements.phase2Task.textContent = 'ドキュメント生成完了';
+
+        // Complete画面へ自動遷移（1秒後）
+        setTimeout(() => {
+            showStep('complete');
+            setupCompleteUI();
+        }, 1000);
+
+    } catch (error) {
+        console.error('Failed to generate document:', error);
+        showErrorMessage('ドキュメント生成に失敗しました');
+    }
 }
 
 function updatePhase2Stages(currentStage) {
@@ -925,8 +946,14 @@ function handlePhaseChange(phase) {
             startPhase2();
             break;
         case 'complete':
-            showStep('complete');
-            setupCompleteUI();
+            // Phase2画面にいる場合は解析完了処理を実行
+            if (state.currentStep === 'phase2') {
+                handleAnalysisComplete();
+            } else {
+                // それ以外の場合は既存の動作（Complete画面へ直接遷移）
+                showStep('complete');
+                setupCompleteUI();
+            }
             break;
         case 'error':
             alert('処理中にエラーが発生しました。');
