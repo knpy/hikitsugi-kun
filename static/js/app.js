@@ -344,7 +344,16 @@ function updatePhase1Progress(step, progress) {
     // SSEから受信した進捗で更新
     elements.phase1Progress.textContent = `${progress}%`;
     elements.phase1ProgressBar.style.width = `${progress}%`;
-    elements.currentRecognition.textContent = step;
+
+    // 50-70%の区間で追加メッセージ表示
+    if (progress >= 50 && progress < 70) {
+        elements.currentRecognition.innerHTML = `
+            ${step}
+            <span class="text-muted" style="font-size: 0.9em;">（しばらくお待ちください...）</span>
+        `;
+    } else {
+        elements.currentRecognition.textContent = step;
+    }
 }
 
 // ==========================================================================

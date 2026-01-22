@@ -11,7 +11,7 @@ from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, HTTPExce
 from fastapi.responses import JSONResponse
 
 from services.session import get_or_create_session, ProcessingPhase
-from services.gemini import upload_video_to_gemini, analyze_video_scoping
+from services.gemini import upload_video_to_gemini, analyze_video_scoping, analyze_audio_scoping_from_video
 from frame_extractor import extract_frames, clip_video_head
 
 router = APIRouter()
@@ -61,38 +61,9 @@ async def _process_video_async(session_id: str, file_path: str, mime_type: str):
         session.processing_progress = 0
         session.update()
 
-        # 2. クリップ作成
-        session.processing_step = "冒頭5分を抽出中"
-        session.processing_progress = 10
-        session.update()
-
-        clip_path = file_path + "_clip.mp4"
-        logger.info(f"Creating clip: {clip_path}")
-        clip_video_head(file_path, clip_path, duration=300)
-
-        if os.path.exists(clip_path):
-            logger.info(f"Clip created successfully. Size: {os.path.getsize(clip_path)} bytes")
-        else:
-            logger.error(f"Clip file not created!")
-
+        # 2. 音声ベースのスコーピング実行 (GPT-4o + Gemini)
+        session.processing_step = "動画を解析中（冒頭シーンを確認）"
         session.processing_progress = 20
-        session.update()
-
-        # 3. クリップをGeminiにアップロード
-        session.processing_step = "動画を読み込んでいます"
-        session.processing_progress = 25
-        session.update()
-
-        logger.info("Uploading clip to Gemini...")
-        clip_file = await upload_video_to_gemini(clip_path, mime_type)
-        logger.info(f"Clip uploaded. Gemini file name: {clip_file.name}")
-
-        session.processing_progress = 40
-        session.update()
-
-        # 4. スコーピング実行
-        session.processing_step = "業務内容を確認しています"
-        session.processing_progress = 50
         session.update()
 
         user_context = ""
@@ -104,14 +75,27 @@ async def _process_video_async(session_id: str, file_path: str, mime_type: str):
             user_context += f"- 補足: {session.additional_notes}\n"
 
         logger.info(f"User context: {user_context if user_context else '(empty)'}")
-        logger.info("Starting scoping analysis...")
+        logger.info("Starting audio scoping analysis...")
 
-        scoping_result = await analyze_video_scoping(clip_file, user_context)
+        # 音声抽出 -> 文字起こし -> スコーピング (高速処理)
+        scoping_result = await analyze_audio_scoping_from_video(file_path, user_context)
         logger.info(f"Scoping result (first 200 chars): {scoping_result[:200] if scoping_result else '(empty)'}")
 
         session.scoping_result = scoping_result
         session.user_policy = scoping_result  # デフォルトで同じ
 
+        # スコーピング完了後の進捗表示
+
+        session.processing_step = "動画を解析中（業務フローを把握）"
+        session.processing_progress = 60
+        session.update()
+
+        await asyncio.sleep(1)
+        session.processing_step = "動画を解析中（重要ポイントを抽出）"
+        session.processing_progress = 65
+        session.update()
+
+        await asyncio.sleep(1)
         session.processing_progress = 70
         session.update()
 
@@ -127,10 +111,8 @@ async def _process_video_async(session_id: str, file_path: str, mime_type: str):
         session.processing_progress = 90
         session.update()
 
-        # クリップファイルを削除
-        if os.path.exists(clip_path):
-            os.unlink(clip_path)
-            logger.info("Clip file deleted")
+        # 不要になったクリップ削除処理を削除（音声スコーピングなのでクリップファイルなし）
+
 
         # 6. 完了
         session.processing_step = "解析完了"
