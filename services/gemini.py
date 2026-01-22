@@ -247,7 +247,8 @@ async def _extract_audio_for_transcription(video_path: str, duration: Optional[i
     return output_path
 
 
-async def analyze_audio_scoping_from_video(video_path: str, user_context: str = "") -> str:
+
+async def analyze_audio_scoping_from_video(video_path: str, user_context: str = "", log_callback=None) -> str:
     """
     動画から音声を抽出し、gpt-4o-transcribeで文字起こしを行った上で
     テキストベースのスコーピング解析を行う（高速版）
@@ -262,23 +263,40 @@ async def analyze_audio_scoping_from_video(video_path: str, user_context: str = 
         logger.info(f"Audio extraction completed in {time.time() - start:.1f}s")
         
         # 2. 文字起こし (gpt-4o-transcribe)
-        start = time.time()
+        transcribe_start = time.time()
+        transcription_model = "gpt-4o-transcribe"
+        logger.info(f"[{transcription_model}] Starting transcription...")
+        if log_callback:
+            log_callback(f"[{transcription_model}] 音声文字起こしを開始しました...")
+        
         with open(audio_path, "rb") as f:
             transcript_response = await openai_client.audio.transcriptions.create(
-                model="gpt-4o-transcribe",
+                model=transcription_model,
                 file=f,
                 response_format="json",
                 language="ja"
             )
         transcript = transcript_response.text
-        logger.info(f"Transcription completed in {time.time() - start:.1f}s. Length: {len(transcript)} chars")
+        transcribe_duration = time.time() - transcribe_start
+        logger.info(f"[{transcription_model}] Transcription completed in {transcribe_duration:.2f}s. Length: {len(transcript)} chars")
+        if log_callback:
+            log_callback(f"[{transcription_model}] 文字起こし完了 ({transcribe_duration:.1f}秒, {len(transcript)}文字)")
         
         # 3. Geminiでスコーピング解析
+        gemini_model_name = "gemini-2.5-flash-lite"  # model.model_name が直接取れないため明示
         prompt = f"{SCOPING_PROMPT_AUDIO_ONLY}\n\n【ユーザーからの事前情報】\n{user_context}\n\n【音声書き起こし】\n{transcript}"
-        logger.info(f"Sending transcript to Gemini for scoping...")
+        
+        logger.info(f"[{gemini_model_name}] Starting scoping analysis...")
+        if log_callback:
+            log_callback(f"[{gemini_model_name}] 解析を開始しました...")
+        scoping_start = time.time()
         
         response = await generate_with_retry(prompt)
-        logger.info(f"Scoping response received. Length: {len(response.text)} chars")
+        
+        scoping_duration = time.time() - scoping_start
+        logger.info(f"[{gemini_model_name}] Scoping response received in {scoping_duration:.2f}s. Length: {len(response.text)} chars")
+        if log_callback:
+            log_callback(f"[{gemini_model_name}] 解析完了 ({scoping_duration:.1f}秒)")
         return response.text
         
     except Exception as e:

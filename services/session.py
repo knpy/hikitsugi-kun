@@ -51,6 +51,9 @@ class SessionData:
     # Phase1進捗情報
     processing_step: str = ""  # "クリップ作成中", "解析中"など
     processing_progress: int = 0  # 0-100
+    
+    # 処理ログ（フロントエンド表示用）
+    processing_logs: list = field(default_factory=list)
 
     def update(self):
         """更新日時を更新"""
