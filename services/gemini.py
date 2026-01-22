@@ -193,24 +193,36 @@ async def generate_with_retry(contents, stream: bool = False, max_retries: int =
             raise e
 
 
-async def upload_video_to_gemini(file_path: str, mime_type: str) -> object:
+async def upload_video_to_gemini(file_path: str, mime_type: str, log_callback=None) -> object:
     """動画をGemini File APIにアップロード"""
     logger.info(f"Uploading to Gemini: {file_path} (type: {mime_type})")
 
     loop = asyncio.get_event_loop()
 
     # アップロード
+    if log_callback:
+        log_callback("[Gemini File API] 動画のアップロードを開始しています...")
+
     file = await loop.run_in_executor(
         None,
         lambda: genai.upload_file(file_path, mime_type=mime_type)
     )
     logger.info(f"Upload started. File name: {file.name}, state: {file.state.name}")
 
+    if log_callback:
+        log_callback(f"[Gemini File API] アップロード完了。処理待機中...")
+
     # 処理完了を待機
     wait_count = 0
     while file.state.name == "PROCESSING":
         wait_count += 1
-        logger.info(f"Waiting for processing... ({wait_count * 2}s)")
+        elapsed = wait_count * 2
+        logger.info(f"Waiting for processing... ({elapsed}s)")
+
+        # 10秒ごとにログを出力（ユーザーへのフィードバック）
+        if wait_count % 5 == 0 and log_callback:
+            log_callback(f"[Gemini File API] 動画を処理中です... ({elapsed}秒経過)")
+
         await asyncio.sleep(2)
         file = await loop.run_in_executor(
             None,
@@ -222,6 +234,8 @@ async def upload_video_to_gemini(file_path: str, mime_type: str) -> object:
     if file.state.name != "ACTIVE":
         raise RuntimeError(f"動画処理失敗: {file.state.name}")
 
+    if log_callback:
+        log_callback(f"[Gemini File API] 動画の処理が完了しました")
 
     return file
 
