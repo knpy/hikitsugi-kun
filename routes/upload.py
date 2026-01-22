@@ -42,6 +42,59 @@ def process_video_background(session_id: str, file_path: str, mime_type: str):
         logger.error(f"Background processing failed: {e}", exc_info=True)
 
 
+def upload_video_background(session_id: str, file_path: str, mime_type: str):
+    """バックグラウンドで動画をGeminiにアップロード（同期ラッパー）"""
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    logger.info(f"Starting background video upload for session {session_id}")
+    try:
+        asyncio.run(_upload_video_async(session_id, file_path, mime_type))
+        logger.info(f"Background video upload completed for session {session_id}")
+    except Exception as e:
+        logger.error(f"Background video upload failed: {e}", exc_info=True)
+
+
+async def _upload_video_async(session_id: str, file_path: str, mime_type: str):
+    """動画をGemini File APIにアップロード"""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    from services.session import get_session
+
+    session = get_session(session_id)
+    if not session:
+        logger.error(f"Session not found: {session_id}")
+        return
+
+    try:
+        # upload_statusがまだpendingの場合のみ設定（通常は呼び出し元で設定済み）
+        if session.upload_status == "pending":
+            session.upload_status = "uploading"
+            session.update()
+
+        # ログコールバック関数
+        def log_callback(msg):
+            import time
+            timestamp = time.strftime("%H:%M:%S")
+            log_entry = {"timestamp": timestamp, "message": msg}
+            session.processing_logs.append(log_entry)
+            logger.info(f"[Frontend Log] {msg}")
+
+        logger.info("Uploading full video to Gemini...")
+        session.gemini_file = await upload_video_to_gemini(file_path, mime_type, log_callback=log_callback)
+        logger.info(f"Full video uploaded. Gemini file name: {session.gemini_file.name}")
+
+        session.upload_status = "completed"
+        session.update()
+
+    except Exception as e:
+        logger.error(f"Video upload error: {e}", exc_info=True)
+        session.upload_status = "failed"
+        session.upload_error = str(e)
+        session.update()
+
+
 async def _process_video_async(session_id: str, file_path: str, mime_type: str):
     """動画処理の非同期実装"""
     import logging
@@ -106,27 +159,20 @@ async def _process_video_async(session_id: str, file_path: str, mime_type: str):
         session.processing_progress = 70
         session.update()
 
-        # 5. 全編動画をアップロード（詳細解析用）
-        session.processing_step = "解析方針を検討しています"
-        session.processing_progress = 75
-        session.update()
-
-        logger.info("Uploading full video to Gemini...")
-        session.gemini_file = await upload_video_to_gemini(file_path, mime_type)
-        logger.info(f"Full video uploaded. Gemini file name: {session.gemini_file.name}")
-
-        session.processing_progress = 90
-        session.update()
-
-        # 不要になったクリップ削除処理を削除（音声スコーピングなのでクリップファイルなし）
-
-
-        # 6. 完了
+        # 5. 完了（動画アップロードはバックグラウンドで実行）
         session.processing_step = "解析完了"
         session.processing_progress = 100
         session.phase = ProcessingPhase.QUESTIONING
         session.update()
         logger.info("Processing complete, phase set to QUESTIONING")
+
+        # 6. バックグラウンドで動画をアップロード
+        # アップロード状態を事前に設定（タスク開始遅延対策）
+        session.upload_status = "uploading"
+        session.update()
+        logger.info("Starting background video upload...")
+        asyncio.create_task(_upload_video_async(session_id, file_path, mime_type))
+        logger.info("Background video upload task created")
 
     except Exception as e:
         logger.error(f"Processing error: {e}", exc_info=True)
