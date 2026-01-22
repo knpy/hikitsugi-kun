@@ -68,8 +68,10 @@ async def _upload_video_async(session_id: str, file_path: str, mime_type: str):
         return
 
     try:
-        session.upload_status = "uploading"
-        session.update()
+        # upload_statusがまだpendingの場合のみ設定（通常は呼び出し元で設定済み）
+        if session.upload_status == "pending":
+            session.upload_status = "uploading"
+            session.update()
 
         # ログコールバック関数
         def log_callback(msg):
@@ -165,6 +167,9 @@ async def _process_video_async(session_id: str, file_path: str, mime_type: str):
         logger.info("Processing complete, phase set to QUESTIONING")
 
         # 6. バックグラウンドで動画をアップロード
+        # アップロード状態を事前に設定（タスク開始遅延対策）
+        session.upload_status = "uploading"
+        session.update()
         logger.info("Starting background video upload...")
         asyncio.create_task(_upload_video_async(session_id, file_path, mime_type))
         logger.info("Background video upload task created")
