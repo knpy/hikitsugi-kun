@@ -234,8 +234,8 @@ def clip_video_head(video_path: str, output_path: str, duration: int = 300) -> N
     try:
         (
             ffmpeg
-            .input(video_path, ss=0, t=duration)
-            .output(output_path, c="copy")
+            .input(video_path, ss=0, t=duration, accurate_seek=None)
+            .output(output_path, c="copy", avoid_negative_ts="make_zero")
             .overwrite_output()
             .run(quiet=True)
         )

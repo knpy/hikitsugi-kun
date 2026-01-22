@@ -59,3 +59,8 @@ htmlcov/
 
 # v0 Mock
 v0-mock/
+
+# Video files
+*.mp4
+*.mov
+*.webm

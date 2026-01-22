@@ -9,6 +9,9 @@ import logging
 from typing import AsyncGenerator, Optional
 
 import google.generativeai as genai
+import ffmpeg
+import tempfile
+from openai import AsyncOpenAI
 from google.api_core import exceptions as google_exceptions
 from dotenv import load_dotenv
 
@@ -20,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 # モデル設定
 model = genai.GenerativeModel('gemini-2.5-flash-lite')
+openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # システムプロンプト
 SYSTEM_PROMPT = """あなたは業務引継ぎ専門の支援AIです。
@@ -62,6 +66,26 @@ SCOPING_PROMPT = """
 これは引継ぎ動画の「冒頭5分間」です。この動画を見て、以下の3点を簡潔に出力してください。
 
 1. **業務テーマ**: 何の業務についての動画か（1行で）
+2. **対象者**: 誰に向けた説明か
+3. **解析方針案**: この動画全体を解析して引継ぎ資料を作る際、どこを重点的に見るべきか、何に注意すべきか（箇条書き3点以内）
+
+出力形式:
+---
+【業務テーマ】
+...
+【対象者】
+...
+【解析方針案】
+- ...
+- ...
+- ...
+"""
+
+SCOPING_PROMPT_AUDIO_ONLY = """
+あなたは業務引継ぎの専門家です。
+以下は引継ぎ動画の「冒頭5分間」の音声書き起こしです。この内容から、以下の3点を簡潔に出力してください。
+
+1. **業務テーマ**: 何の業務についての説明か（1行で）
 2. **対象者**: 誰に向けた説明か
 3. **解析方針案**: この動画全体を解析して引継ぎ資料を作る際、どこを重点的に見るべきか、何に注意すべきか（箇条書き3点以内）
 
@@ -198,7 +222,74 @@ async def upload_video_to_gemini(file_path: str, mime_type: str) -> object:
     if file.state.name != "ACTIVE":
         raise RuntimeError(f"動画処理失敗: {file.state.name}")
 
+
     return file
+
+
+async def _extract_audio_for_transcription(video_path: str, duration: Optional[int] = None) -> str:
+    """文字起こし用に動画から音声を抽出（mp3形式）"""
+    output_path = tempfile.NamedTemporaryFile(suffix='.mp3', delete=False).name
+    loop = asyncio.get_event_loop()
+
+    def _run_ffmpeg():
+        stream = ffmpeg.input(video_path)
+        if duration:
+            stream = ffmpeg.input(video_path, t=duration)
+            
+        (
+            stream
+            .output(output_path, ac=1, ar=16000, acodec='libmp3lame', q=2)
+            .overwrite_output()
+            .run(quiet=True)
+        )
+
+    await loop.run_in_executor(None, _run_ffmpeg)
+    return output_path
+
+
+async def analyze_audio_scoping_from_video(video_path: str, user_context: str = "") -> str:
+    """
+    動画から音声を抽出し、gpt-4o-transcribeで文字起こしを行った上で
+    テキストベースのスコーピング解析を行う（高速版）
+    """
+    logger.info(f"Starting audio-only scoping analysis for: {video_path}")
+    audio_path = None
+    
+    try:
+        # 1. 音声抽出 (冒頭5分のみ)
+        start = time.time()
+        audio_path = await _extract_audio_for_transcription(video_path, duration=300)
+        logger.info(f"Audio extraction completed in {time.time() - start:.1f}s")
+        
+        # 2. 文字起こし (gpt-4o-transcribe)
+        start = time.time()
+        with open(audio_path, "rb") as f:
+            transcript_response = await openai_client.audio.transcriptions.create(
+                model="gpt-4o-transcribe",
+                file=f,
+                response_format="json",
+                language="ja"
+            )
+        transcript = transcript_response.text
+        logger.info(f"Transcription completed in {time.time() - start:.1f}s. Length: {len(transcript)} chars")
+        
+        # 3. Geminiでスコーピング解析
+        prompt = f"{SCOPING_PROMPT_AUDIO_ONLY}\n\n【ユーザーからの事前情報】\n{user_context}\n\n【音声書き起こし】\n{transcript}"
+        logger.info(f"Sending transcript to Gemini for scoping...")
+        
+        response = await generate_with_retry(prompt)
+        logger.info(f"Scoping response received. Length: {len(response.text)} chars")
+        return response.text
+        
+    except Exception as e:
+        logger.error(f"Audio scoping failed: {e}")
+        raise e
+        
+    finally:
+        # 一時ファイルの削除
+        if audio_path and os.path.exists(audio_path):
+            os.unlink(audio_path)
+            logger.debug(f"Temporary audio file deleted: {audio_path}")
 
 
 async def analyze_video_scoping(gemini_file: object, user_context: str = "") -> str:
