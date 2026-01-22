@@ -2,81 +2,78 @@
 
 ## Git ワークフロー
 
-### ブランチ戦略
-- `main`: 本番ブランチ（直接プッシュ禁止）
-- `feature/xxx`: 機能追加
-- `fix/xxx`: バグ修正
-- `refactor/xxx`: リファクタリング
+### ブランチ運用
+- **main**: プロダクション用ブランチ。直接プッシュ不可。必ずPR経由でマージする。
+- **feature/xxx**: 新機能開発用。基本的にここ等で作業する。
+- **fix/xxx**: バグ修正用。
+- **refactor/xxx**: リファクタリング用。
 
-### 開発フロー
-```bash
-# 1. mainから最新を取得
-git checkout main
-git pull origin main
+### 開発運用ルール（厳守）
 
-# 2. 機能ブランチを作成
-git checkout -b feature/機能名
+1.  **mainブランチでの作業禁止**
+    - `main` ブランチへ直接コミット・プッシュすることは禁止です。
+    - 必ず作業用ブランチを切って作業してください。
 
-# 3. 変更をコミット（日本語でOK）
-git add .
-git commit -m "機能の説明"
+2.  **コミットは最小単位で**
+    - 後から修正しやすいように、コミットの粒度を細かく保ってください。
+    - "WIP" や "Fix typo" のような意味のないコミットは避け、具体的に何をしたかを記述してください。
 
-# 4. リモートにプッシュ
-git push -u origin feature/機能名
+3.  **マージ後の同期**
+    - PRが `main` にマージされたら、直ちにローカルの `main` ブランチを更新してください。
+    - 次の作業は、必ず最新の `main` から新しいブランチを切って開始してください。
 
-# 5. PRを作成
-gh pr create --title "PRタイトル" --body "説明"
-```
+### 開発フロー詳細
+1. **最新化**:
+   ```bash
+   git checkout main
+   git pull origin main
+   ```
+2. **ブランチ作成**:
+   ```bash
+   git checkout -b feature/わかりやすい機能名
+   ```
+3. **作業 & コミット**:
+   - 変更はこまめにコミットする。
+   ```bash
+   git add 何を変更したか
+   git commit -m "feat: チャット保存機能の土台を作成"
+   ```
+   - *（推奨）プレフィックス*: `feat:`, `fix:`, `docs:`, `style:`, `refactor:`
+4. **プッシュ & PR**:
+   ```bash
+   git push -u origin feature/機能名
+   gh pr create
+   ```
+5. **マージ後**:
+   - 再び手順1（最新化）に戻る。
 
-### コミットメッセージ
-- 日本語で記述
-- 簡潔に変更内容を説明
-- 例: `チャット履歴の保存機能を追加`
+## タスク管理
 
-### ⚠️ その他のルール
-- **PRマージ確認**: PRを作成した後は、マージされているかを確認すること（手動でマージしていることがある仕組みのため）。
-- **新規ブランチ**: 新たな機能を作るときは、必ずブランチを新しく切ること。
-- **最新コードの反映**: ブランチを切る際は、必ずリモートリポジトリの最新をpullしてから作業を開始すること。
+### タスク追跡のルール
+- /Users/kenshiro.takasaki/.gemini/antigravity/brain/770cb451-012a-4e41-8701-1ffca33a88f7/task.md.resolved を常に最新状態に保つ。
+- エージェントは作業開始前にこのファイルを読み、自身の作業計画をここに反映させる。
+
+### フォーマット
+- `- [ ] タスク`: 未着手
+- `- [/] タスク`: 進行中（エージェント独自記法として許容）
+- `- [x] タスク`: 完了
+
+### エージェントへの指示
+1. **着手前**: ユーザーの依頼を `task.md` の項目として追加・整理する。
+2. **進行中**: 現在行っている作業を `[/]` にする、または詳細なサブタスクを追加する。
+3. **完了時**: `[x]` に更新し、次のタスクを確認する。
+4. **報告**: ユーザーへの報告時に、完了したタスクと次のアクションを明確にする。
 
 ## 技術スタック
 
-- **フロントエンド**: Streamlit
+- **フロントエンド**: HTMX
+- **バックエンド**: FastAPI
 - **AI**: Google Gemini API (gemini-2.5-flash-lite)
 - **言語**: Python 3.14
 
-## 環境構築
-
+## 起動方法
 ```bash
-# 仮想環境作成
-python -m venv venv
-source venv/bin/activate
-
-# 依存パッケージインストール
-pip install -r requirements.txt
-
-# 環境変数設定
-cp .env.example .env
-# GOOGLE_API_KEY を設定
-
-# 起動
-streamlit run app.py
+# サーバー起動 (ポート8000で待機)
+python main.py
 ```
-
-## 環境変数
-
-`.env` ファイルに以下を設定:
-```
-GOOGLE_API_KEY=your_api_key_here
-```
-
-## Streamlit設定
-
-`.streamlit/config.toml`:
-- `maxUploadSize = 2000`: アップロード上限2GB（動画対応）
-
-## Gemini API メモ
-
-```python
-# 低解像度で節約したい場合（動画処理）
-generation_config={"media_resolution": "low"}  # または "high"
-```
+- アクセス: http://localhost:8000
