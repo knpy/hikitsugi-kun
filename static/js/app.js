@@ -15,6 +15,9 @@ const state = {
     fileName: '',
     fileSize: 0,
 
+    // ログ表示用
+    lastLogIndex: 0,
+
     // 質問関連
     questions: [
         {
@@ -315,6 +318,7 @@ async function handleFileUpload(file) {
         // Start SSE connection after successful upload
         setTimeout(() => {
             startEventStream();
+            startLogPolling(); // Start polling for logs
         }, 500);
 
     } catch (error) {
@@ -991,6 +995,47 @@ function init() {
 
     // Show initial step
     showStep('welcome');
+}
+
+// ==========================================================================
+// Log Polling
+// ==========================================================================
+function startLogPolling() {
+    console.log('Starting log polling...');
+    pollLogs();
+}
+
+async function pollLogs() {
+    if (!state.sessionId) return;
+
+    try {
+        const response = await fetch(`/api/status/${state.sessionId}`);
+        if (!response.ok) return;
+
+        const data = await response.json();
+
+        if (data.processing_logs && data.processing_logs.length > 0) {
+            const newLogs = data.processing_logs.slice(state.lastLogIndex);
+
+            newLogs.forEach(log => {
+                const style = 'color: #10b981; font-weight: bold;';
+                console.log(`%c[Backend ${log.timestamp}] ${log.message}`, style);
+            });
+
+            state.lastLogIndex = data.processing_logs.length;
+        }
+
+        // Continue polling if not complete or error
+        if (data.phase !== 'complete' && data.phase !== 'error' && data.phase !== 'questioning') {
+            setTimeout(pollLogs, 2000); // Poll every 2 seconds
+        } else {
+            console.log('Log polling stopped (phase: ' + data.phase + ')');
+        }
+
+    } catch (e) {
+        console.warn('Log polling error:', e);
+        setTimeout(pollLogs, 5000);
+    }
 }
 
 // Start when DOM is ready

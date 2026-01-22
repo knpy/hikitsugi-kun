@@ -78,7 +78,14 @@ async def _process_video_async(session_id: str, file_path: str, mime_type: str):
         logger.info("Starting audio scoping analysis...")
 
         # 音声抽出 -> 文字起こし -> スコーピング (高速処理)
-        scoping_result = await analyze_audio_scoping_from_video(file_path, user_context)
+        def log_callback(msg):
+            import time
+            timestamp = time.strftime("%H:%M:%S")
+            log_entry = {"timestamp": timestamp, "message": msg}
+            session.processing_logs.append(log_entry)
+            logger.info(f"[Frontend Log] {msg}")
+
+        scoping_result = await analyze_audio_scoping_from_video(file_path, user_context, log_callback=log_callback)
         logger.info(f"Scoping result (first 200 chars): {scoping_result[:200] if scoping_result else '(empty)'}")
 
         session.scoping_result = scoping_result
@@ -204,4 +211,5 @@ async def get_status(session_id: str):
         "filename": session.filename,
         "scoping_result": session.scoping_result,
         "user_policy": session.user_policy,
+        "processing_logs": session.processing_logs,
     })
